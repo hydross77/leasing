@@ -388,6 +388,71 @@ Le RIB ayant été retiré des obligatoires (cf `glossaire.md` et PDF v2 page 3)
 
 ---
 
+## ADR-015 — Gestion des ré-analyses quand le vendeur redépose un dossier corrigé
+
+**Date** : 2026-05-13
+**Statut** : Acceptée
+
+### Contexte
+Salesforce ne supprime pas l'ancien fichier quand un vendeur en uploade un nouveau : les deux coexistent comme records `NEILON__File__c` distincts liés à l'opportunité. Le workflow v1 récupère **tous** les fichiers de l'opportunité et les envoie à l'IA → l'ancien BDC fautif est analysé en même temps que le nouveau corrigé. De plus, `Tech_Dossier_verifier__c = TRUE` après la première analyse, et rien ne déclenche une ré-analyse quand un nouveau fichier arrive.
+
+**Conséquences en v1** :
+- Faux positifs persistants : l'anomalie de l'ancien BDC continue de remonter même après correction
+- Pas de re-déclenchement automatique : le vendeur qui corrige doit demander une ré-analyse manuelle
+
+### Décision
+Approche progressive en 3 niveaux. **Démarrer au Niveau 1 (MVP simple)**, faire évoluer si nécessaire.
+
+**Niveau 1 — MVP simple (Phase 5)**
+
+- **Trigger Salesforce (admin)** : quand un `NEILON__File__c` est créé sur une `Opportunity` qui a `Leasing_electrique__c = TRUE` ET `Tech_Dossier_verifier__c = TRUE`, repasser `Tech_Dossier_verifier__c = FALSE` (ce qui replace l'opp dans la queue n8n).
+- **Côté API** : analyser tous les fichiers reçus. Au moment du verdict, **dédupliquer côté Python** : si plusieurs documents du même type (`type_document`) sont détectés, garder le plus récent (`CreatedDate` du `NEILON__File__c`).
+- **Logging** : tracer le nombre de doublons écartés par dossier dans `analyses.documents_manquants` ou un champ dédié, pour suivi monitoring.
+
+**Niveau 2 — MVP intelligent (post-MVP, si coût IA trop élevé)**
+
+- L'API filtre **avant** d'envoyer à Gemini : pour chaque opp, ne charger que le `NEILON__File__c` le plus récent par type déduit (à partir du nom de fichier si renommé par IA, sinon nécessite une 1ère passe de classification rapide).
+- Économise des tokens en évitant de ré-analyser les fichiers obsolètes.
+
+**Niveau 3 — Cible (si Phase 4 backtest montre des limites Niveaux 1/2)**
+
+- Salesforce admin ajoute le champ picklist `Type_document__c` (ADR-014) ET un champ booléen `Obsolete__c` sur `NEILON__File__c`.
+- Trigger SF : "quand un fichier de type X est ajouté à une opp, marquer les autres fichiers de type X de cette opp comme `Obsolete = TRUE`".
+- L'API filtre dans sa SOQL : `WHERE Obsolete__c = FALSE`.
+- Avantage : la déduplication est faite en SF, le record reste accessible (pour audit) mais ignoré en analyse.
+
+### Schéma de fonctionnement (Niveau 1)
+
+```
+Vendeur upload BDC corrigé
+   ▼
+NEILON__File__c créé (l'ancien reste en base)
+   ▼
+Trigger SF : Tech_Dossier_verifier__c = TRUE → FALSE
+   ▼
+n8n détecte l'opp à retraiter (prochain cycle)
+   ▼
+API analyse tous les NEILON__File__c
+   ▼
+Pour chaque type détecté : keep most recent by CreatedDate
+   ▼
+Verdict basé uniquement sur les fichiers les plus récents
+```
+
+### Conséquences
+- ➕ Niveau 1 : déploiement rapide, 1 trigger SF + un peu de Python. Aucun changement côté vendeur.
+- ➕ Aucun faux positif lié à un ancien fichier corrigé
+- ➕ Re-déclenchement automatique = vendeur n'a rien à demander manuellement
+- ➖ Coût IA augmenté (chaque ajout de fichier = re-analyse complète) — acceptable au MVP, ~30-50% de tokens en plus selon la fréquence des corrections
+- ➖ Niveau 1 dépend de la qualité de détection du `type_document` par Gemini (si confusion, mauvaise dédup) — d'où le passage en Niveau 3 si nécessaire
+
+### Indicateur à monitorer (Phase 6)
+- Taux de ré-analyses par opportunité (moyenne) — si > 3, voir si on peut tagger le doc comme "version finale" avant envoi
+- Taux de doublons écartés par dossier
+- Si coût IA / dossier > 0,50 € (cible de la roadmap) à cause des ré-analyses → passer Niveau 2 ou 3
+
+---
+
 ## Template pour ajouter une nouvelle ADR
 
 ```markdown

@@ -254,9 +254,7 @@ def process_opportunity(
         "extracted_at": datetime.now(UTC).isoformat(),
     }
 
-    manifest_path.write_text(
-        json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
 
     log.info(
         "opp_processed",
@@ -329,18 +327,14 @@ def write_stats_report(manifests: list[dict[str, Any]], known_concessions: set[s
 
     lines.append("\n## Par couple (marque, concession)\n\n")
     lines.append("| Marque | Concession | Nb dossiers |\n|--------|-----------|------------|\n")
-    for (marque, concession), count in sorted(
-        by_pair.items(), key=lambda kv: (-kv[1], kv[0])
-    ):
+    for (marque, concession), count in sorted(by_pair.items(), key=lambda kv: (-kv[1], kv[0])):
         lines.append(f"| {marque} | {concession} | {count} |\n")
 
     if unknown_concessions:
         lines.append("\n## ⚠️ Concessions hors mapping n8n v1\n\n")
         for c in sorted(unknown_concessions):
             lines.append(f"- {c}\n")
-        lines.append(
-            "\nÀ ajouter à la table `concessions` de Supabase et au mapping email.\n"
-        )
+        lines.append("\nÀ ajouter à la table `concessions` de Supabase et au mapping email.\n")
 
     lines.append("\n## Patterns de nommage des fichiers\n\n")
     lines.append("| Pattern | Nb |\n|---------|----|\n")
@@ -396,14 +390,12 @@ def main() -> int:
     with httpx.Client() as http_client:
         for i, opp in enumerate(opportunities, 1):
             try:
-                manifest = process_opportunity(
-                    sf, opp, fernet, http_client, args.metadata_only
-                )
+                manifest = process_opportunity(sf, opp, fernet, http_client, args.metadata_only)
                 if manifest:
                     manifests.append(manifest)
                 if i % 20 == 0:
                     log.info("progress", processed=i, total=len(opportunities))
-            except Exception as exc:  # noqa: BLE001 — on log et on continue
+            except Exception as exc:
                 log.error(
                     "opp_processing_failed",
                     opportunity_id=opp.get("Id"),

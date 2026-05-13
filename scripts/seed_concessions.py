@@ -18,7 +18,6 @@ from supabase import Client, create_client
 
 from app.config import get_settings
 
-
 # Extrait du node "Mapping concession" du workflow n8n v1.
 # Format : nom_salesforce -> email_conformite.
 CONCESSION_MAPPING: dict[str, str] = {

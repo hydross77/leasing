@@ -152,7 +152,7 @@ def analyze_pdf_with_gemini(
                 error=str(exc),
                 preview=text[:200] if "text" in locals() else "",
             )
-        except Exception as exc:  # noqa: BLE001 — Gemini wrap ses erreurs
+        except Exception as exc:
             log.warning("gemini_call_failed", attempt=attempt, error=str(exc))
             if attempt < max_retries:
                 time.sleep(2**attempt)
@@ -189,7 +189,7 @@ def process_manifest(
         else:
             try:
                 pdf_bytes = decrypt_pdf(encrypted_path, fernet)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 log.error("decrypt_failed", path=str(encrypted_path), error=str(exc))
                 continue
 
@@ -219,9 +219,7 @@ def main() -> int:
         action="store_true",
         help="Pas d'appel Gemini, génère juste l'index des dossiers échantillonnés",
     )
-    parser.add_argument(
-        "--model", type=str, default=DEFAULT_MODEL, help="Modèle Gemini à utiliser"
-    )
+    parser.add_argument("--model", type=str, default=DEFAULT_MODEL, help="Modèle Gemini à utiliser")
     args = parser.parse_args()
 
     settings = get_settings()
@@ -256,10 +254,8 @@ def main() -> int:
                 success = process_manifest(manifest, model, fernet, fh)
                 total_success += success
                 if i % 10 == 0:
-                    log.info(
-                        "progress", processed=i, total=len(sampled), success=total_success
-                    )
-            except Exception as exc:  # noqa: BLE001
+                    log.info("progress", processed=i, total=len(sampled), success=total_success)
+            except Exception as exc:
                 log.error(
                     "manifest_analysis_failed",
                     opportunity_id=manifest.get("opportunity_id"),

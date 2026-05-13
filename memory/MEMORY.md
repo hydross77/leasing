@@ -9,3 +9,4 @@
 - [Étude avant code des prompts](feedback_etude_avant_code.md) — Phase 1 obligatoire avant Phase 2, pas de prompt en aveugle
 - [Mail override en test](project_mail_override_test.md) — en dev/test, tous les mails partent vers tiffanydellmann@hessautomobile.com
 - [Typage pièces SF](project_typage_pieces_sf.md) — pas de champ dédié côté SF, renommage IA d'abord puis picklist post-MVP (ADR-014)
+- [Ré-analyses après correction vendeur](project_re_analyses.md) — ancien fichier reste en SF, dédup côté API + trigger SF pour re-déclencher (ADR-015)
