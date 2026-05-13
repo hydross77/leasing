@@ -218,6 +218,7 @@ Total côté n8n actuel : 8 marques, ~58 concessions.
 - **Pièce d'identité étrangère** : titre de séjour obligatoire valide
 - **Dossier livré avant 30/09/2025** : non éligible au dispositif (mais cas rare désormais)
 - **Véhicule d'occasion** : ce dispositif ne couvre que le neuf
+- **Concession = "Siège"** : dossier **invalide d'office**. Le Siège HESS n'est pas un point de vente, donc une opportunité Leasing rattachée au Siège est une erreur de saisie côté Salesforce. À exclure de l'extraction Phase 1 et à rejeter automatiquement en Phase 3 (`verification.py`).
 
 ---
 

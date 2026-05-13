@@ -10,3 +10,6 @@
 - [Mail override en test](project_mail_override_test.md) — en dev/test, tous les mails partent vers tiffanydellmann@hessautomobile.com
 - [Typage pièces SF](project_typage_pieces_sf.md) — pas de champ dédié côté SF, renommage IA d'abord puis picklist post-MVP (ADR-014)
 - [Ré-analyses après correction vendeur](project_re_analyses.md) — ancien fichier reste en SF, dédup côté API + trigger SF pour re-déclencher (ADR-015)
+- [Dashboard comptable Streamlit](project_dashboard_comptable.md) — validation systématique comptable avant tout mail vendeur, peu importe le verdict (ADR-013 rév + ADR-016)
+- [Concession "Siège" invalide](project_siege_invalide.md) — dossier rattaché au Siège HESS = invalide d'office, à exclure partout
+- [Refus d'office (bypass IA + comptable)](project_refus_office.md) — règles binaires (ex: Siège) → mail vendeur direct (ADR-017)

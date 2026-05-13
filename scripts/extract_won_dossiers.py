@@ -31,8 +31,12 @@ from cryptography.fernet import Fernet, InvalidToken
 from simple_salesforce import Salesforce
 from simple_salesforce.exceptions import SalesforceError
 
-from app.config import get_settings
-from app.utils.logging import get_logger, setup_logging
+# Permet l'import de seed_concessions (même dossier scripts/)
+sys.path.insert(0, str(Path(__file__).parent))
+
+from app.config import get_settings  # noqa: E402
+from app.utils.logging import get_logger, setup_logging  # noqa: E402
+from seed_concessions import CONCESSION_MAPPING  # noqa: E402
 
 log = get_logger("phase1.extract")
 
@@ -52,8 +56,9 @@ SELECT
 FROM Opportunity
 WHERE
     Leasing_electrique__c = TRUE
-    AND StageName = 'Closed Won'
+    AND StageName LIKE '4- Gagné%'
     AND CloseDate = LAST_N_MONTHS:12
+    AND Concession_du_proprietaire__c != 'Siège'
 ORDER BY CloseDate DESC
 """
 
@@ -344,7 +349,7 @@ def write_stats_report(manifests: list[dict[str, Any]], known_concessions: set[s
     report_path = Path("dataset-stats.md")
     report_path.write_text("".join(lines), encoding="utf-8")
     log.info("stats_report_written", path=str(report_path))
-    print(f"\n📊 Rapport : {report_path.resolve()}")
+    print(f"\nRapport : {report_path.resolve()}")
 
 
 def main() -> int:
@@ -371,8 +376,6 @@ def main() -> int:
         for manifest_path in DATASET_ROOT.glob("dossiers/**/manifest.json"):
             manifests.append(json.loads(manifest_path.read_text(encoding="utf-8")))
         log.info("report_mode", manifests_found=len(manifests))
-        from scripts.seed_concessions import CONCESSION_MAPPING
-
         write_stats_report(manifests, set(CONCESSION_MAPPING.keys()))
         return 0
 
@@ -403,9 +406,6 @@ def main() -> int:
                 )
 
     write_aggregated_metadata(manifests)
-
-    from scripts.seed_concessions import CONCESSION_MAPPING
-
     write_stats_report(manifests, set(CONCESSION_MAPPING.keys()))
 
     log.info("extraction_done", total=len(manifests))

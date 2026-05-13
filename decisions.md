@@ -303,46 +303,61 @@ Tout ce qui est opportunité, client, fichier joint, statut, date de livraison, 
 
 ---
 
-## ADR-013 — Validation humaine obligatoire avant envoi mail concession sur les dossiers "non conforme"
+## ADR-013 — Validation humaine systématique par le comptable avant tout envoi mail vendeur
 
-**Date** : 2026-05-13
+**Date** : 2026-05-13 (rév. 2026-05-13 — extension aux verdicts conformes)
 **Statut** : Acceptée
 
 ### Contexte
-Le système v1 envoie automatiquement le mail "non conforme" à la concession (vendeur, secrétaire) **en même temps** que le mail interne à l'équipe HESS (cf `N8N.txt` nœuds `Maill non conforme` → CC interne et `Maill non conforme3` → concession). Conséquence : quand l'IA se trompe (cf les 10 anomalies du PDF v2), un mail erroné arrive chez le vendeur en temps réel. Cela détruit la crédibilité du système et alimente la défiance des concessions.
+Le système v1 envoie automatiquement les mails à la concession (vendeur, secrétaire) en parallèle du mail interne (cf `N8N.txt` nœuds `Maill non conforme` → CC interne et `Maill non conforme3` → concession). Conséquence sur les 10 anomalies du PDF v2 : mails erronés en temps réel → crédibilité détruite.
 
-Tolérance au risque : un faux positif "non conforme" (= dossier conforme déclaré non-conforme) coûte cher en réputation. Un faux négatif (= dossier non conforme déclaré conforme) coûte cher financièrement (aide ASP versée à tort). Les deux doivent être minimisés.
+De plus, **même un verdict `conforme` peut être faux** : si l'IA passe à côté d'une anomalie (faux négatif), un dossier non-conforme est validé → aide ASP versée à tort → reproche financier à HESS. Donc la validation humaine doit couvrir les **deux** cas.
+
+Tolérance au risque :
+- Faux positif `non_conforme` (dossier conforme déclaré non-conforme) → coût en réputation
+- Faux négatif `conforme` (dossier non-conforme déclaré conforme) → coût financier ASP
+
+Les deux doivent passer par un œil humain expert (le comptable HESS).
 
 ### Décision
-**Aucun mail "non conforme" n'est envoyé à la concession sans validation humaine préalable** par l'équipe HESS.
+**Aucun mail au vendeur/secrétaire ne part sans validation comptable préalable, peu importe le verdict IA.**
 
 Flux v2 par verdict :
 
-| Verdict | Mail concession | Mail interne | Validation humaine |
-|---------|-----------------|--------------|--------------------|
-| `conforme` | Direct | CC | Non |
-| `non_conforme` | **Attendre validation** | TO (avec liens approuver/rejeter) | **Obligatoire** |
-| `erreur_technique` | Aucun | TO | Manuel |
-| `aucun_doc` | Aucun | TO | Manuel |
+| Verdict IA | Mail vendeur direct ? | Validation comptable | Mail vendeur final |
+|------------|------------------------|----------------------|---------------------|
+| `conforme` | ❌ Non | **Obligatoire** | Si comptable confirme conforme : "OK conforme"<br>Si comptable détecte anomalie : "redéposer fichier en anomalie" |
+| `non_conforme` | ❌ Non | **Obligatoire** | Si comptable confirme anomalie : "redéposer fichier en anomalie"<br>Si comptable inverse (faux positif IA) : "OK conforme" |
+| `erreur_technique` | ❌ Non | Manuel | Traitement manuel HESS |
+| `aucun_doc` | ❌ Non | Manuel | Mail vendeur "aucune pièce reçue" après validation |
+
+### Outil de validation : Dashboard Comptable (cf ADR-016)
+
+Plutôt que des emails de validation avec liens cliquables (~500/jour à 1000 dossiers/jour), le comptable utilise un **dashboard dédié** (Streamlit) où il peut :
+- Voir tous les dossiers en attente de validation
+- Ouvrir les PDFs du dossier
+- Ajouter/retirer des anomalies (faux positifs/négatifs IA)
+- Cliquer "Valider et envoyer" → déclenche mail vendeur avec la liste **finale** d'anomalies
 
 ### Implémentation
-- **Salesforce** : nouveau champ `Statut_validation_humaine__c` (picklist : `en_attente` / `validée` / `rejetée` / `non_applicable`)
-- **n8n workflow `Leasing_v2`** : sur verdict `non_conforme`, mettre `Statut_validation_humaine__c = en_attente` et envoyer mail interne uniquement (TO Renzo + CC Aurélien/Alexandre) avec 2 boutons cliquables
-- **API ou webhook n8n** : `POST /validation/{opportunity_id}` (avec token) accepte `decision: validée | rejetée` + raison libre
-- **n8n workflow secondaire `Leasing_v2_envoi_concession`** : déclenché quand `Statut_validation_humaine__c = validée`, envoie le mail concession et update SF (`Conformite_du_dossier__c = "Document absent ou à corriger"`)
-- **Si rejetée** : log la raison (champ SF dédié `Validation_humaine_raison__c`), pas de mail concession, le dossier retourne à `Statut_traitement__c = En attente`
+- **Salesforce** : nouveau champ `Statut_validation_humaine__c` (picklist : `en_attente` / `validée_conforme` / `validée_non_conforme` / `non_applicable`)
+- **n8n workflow `Leasing_v2`** : sur tout verdict, mettre `Statut_validation_humaine__c = en_attente`, écrire l'analyse en base Supabase, **ne PAS envoyer de mail vendeur**
+- **Dashboard comptable (Streamlit)** : liste les `analyses` où `statut_validation_humaine = en_attente`. Le comptable édite et clique "Valider".
+- **API endpoint `POST /validation/{analyse_id}`** : reçoit `decision: conforme | non_conforme` + liste d'anomalies finales + raison. Met à jour Supabase + déclenche le webhook n8n pour mail vendeur + update SF.
+- **n8n workflow secondaire `Leasing_v2_envoi_vendeur`** : déclenché par webhook, envoie le mail vendeur + cc concession + update SF final
 
 ### Conséquences
-- ➕ Crédibilité préservée auprès des concessions : aucune erreur IA n'arrive chez le vendeur
-- ➕ Boucle d'amélioration continue : les rejets humains alimentent un dataset pour itérer sur les prompts
-- ➕ Reporting : taux de rejets humains = indicateur clé de la qualité IA
-- ➖ Latence sur les non_conformes (humain dans la boucle = quelques heures)
-- ➖ Charge équipe HESS au démarrage (à 1000 dossiers/jour, on peut s'attendre à ~50-150 non_conformes/jour à valider)
+- ➕ Crédibilité préservée auprès des concessions
+- ➕ Couverture des faux négatifs (pas seulement les faux positifs)
+- ➕ Boucle d'amélioration : les corrections comptable = dataset doré pour itérer sur les prompts
+- ➕ Métriques : taux d'accord IA/comptable par marque (indicateur de qualité prompt)
+- ➖ Latence sur tous les verdicts (humain = quelques heures à quelques jours)
+- ➖ Charge comptable : 1000 dossiers/jour à valider. Mais avec le dashboard et un bon taux d'accord IA (>80% espéré post Phase 4), le travail = 1-2 clics par dossier conforme, plus de temps sur les non_conformes.
 
 ### Évolution prévue
-- Phase de **shadow + validation 100%** au démarrage (toute la prod passe par l'humain)
-- Quand backtest Phase 4 stabilise à >95% de précision pendant 4 semaines, possibilité de **bascule en auto pour les non_conformes haute confiance (indice ≥ 90%)** → seuls les `indice < 90%` passent par validation humaine
-- Décision de bascule à acter en ADR séparée le moment venu, pas avant
+- Phase initiale : **100% des dossiers passent par le comptable** (sécurité maximale)
+- Post backtest >95% stable : possibilité de **bypass auto pour les conformes haute confiance** (indice ≥ 95% + zéro anomalie critique détectée). Décision séparée à acter le moment venu.
+- Les `non_conformes` continuent de passer systématiquement par le comptable (asymétrie volontaire : on prend plus de risque sur les conformes que sur les non_conformes)
 
 ---
 
@@ -388,68 +403,216 @@ Le RIB ayant été retiré des obligatoires (cf `glossaire.md` et PDF v2 page 3)
 
 ---
 
-## ADR-015 — Gestion des ré-analyses quand le vendeur redépose un dossier corrigé
+## ADR-015 — Cycle de vie SF du dossier + ré-analyses sur changement de statut
+
+**Date** : 2026-05-13 (rév. 2026-05-13 — écoute du statut, pas du fichier)
+**Statut** : Acceptée
+
+### Contexte
+Quand l'IA + le comptable concluent que le dossier est en anomalie, le mail au vendeur dit "redéposer le fichier en anomalie sur Salesforce". **Le vendeur ne crée pas un nouveau dossier** — il modifie le dossier existant dans SF (corrige le fichier qui pose souci, change le statut). Notre système doit donc **écouter le statut SF du dossier**, pas seulement les modifications de fichiers individuels.
+
+Par ailleurs, Salesforce ne supprime pas l'ancien `NEILON__File__c` quand le vendeur en uploade un nouveau : les deux coexistent. L'API doit dédupliquer côté Python pour ne garder que le plus récent par type de document.
+
+### Décision
+
+**1. Cycle de vie d'un dossier dans Salesforce** — nouveau champ picklist `Statut_dossier__c` sur `Opportunity` :
+
+| Valeur | Sens | Qui la change | n8n re-déclenche `/analyze` ? |
+|--------|------|---------------|--------------------------------|
+| `nouveau` | Vendeur vient d'uploader, jamais analysé | Vendeur (à création) | ✅ Oui |
+| `en_cours_analyse` | n8n a verrouillé pour traitement | n8n | Non (lui-même) |
+| `en_attente_validation_comptable` | Analyse faite, attend le comptable dans le dashboard | API (après `/analyze`) | Non |
+| `valide_conforme` | Comptable a validé, mail envoyé | Dashboard / API `/validation` | Non (FIN) |
+| `en_anomalie_a_corriger` | Comptable a rejeté, mail envoyé au vendeur | Dashboard / API `/validation` | Non (attend vendeur) |
+| `corrige_a_reverifier` | Vendeur a corrigé, demande ré-analyse | Vendeur (bouton SF) ou trigger auto | ✅ Oui |
+
+**2. Trigger SF (sujet admin)** : à chaque changement de `Statut_dossier__c` vers `nouveau` ou `corrige_a_reverifier`, mettre `Tech_Dossier_verifier__c = FALSE` → le dossier réintègre la queue n8n.
+
+**3. Action vendeur** : un bouton/UI custom dans SF "J'ai corrigé le dossier" qui passe `Statut_dossier__c` de `en_anomalie_a_corriger` → `corrige_a_reverifier`. **Optionnel** : un trigger qui automatise ce passage si un `NEILON__File__c` est modifié sur une opp en `en_anomalie_a_corriger`.
+
+**4. Déduplication côté API** : analyser tous les `NEILON__File__c` reçus, mais au moment du verdict, ne garder que le plus récent par `type_document` détecté (basé sur `CreatedDate`). Tracer les doublons écartés dans le log d'analyse.
+
+### Schéma simplifié
+
+```
+[nouveau / corrige_a_reverifier]
+        ↓ trigger SF : Tech_Dossier_verifier__c = FALSE
+        ↓
+        n8n détecte → passe à [en_cours_analyse] → API /analyze
+        ↓
+        [en_attente_validation_comptable]
+        ↓ Dashboard comptable clic
+   ┌────┴────┐
+   ↓         ↓
+[valide]   [en_anomalie_a_corriger]
+  FIN       ↓ Vendeur corrige + clique "J'ai corrigé"
+            ↓
+            [corrige_a_reverifier] → boucle au début
+```
+
+### Évolution progressive
+
+- **Phase 5 (MVP)** : champ `Statut_dossier__c` + trigger SF + UI vendeur basique. Dédup côté API en gardant le plus récent par type Gemini.
+- **Post-MVP** : si trop de doublons mal gérés, ajouter le champ `Obsolete__c` sur `NEILON__File__c` (cf ADR-014 picklist `Type_document__c`) avec trigger SF qui marque les anciens comme obsolètes quand un nouveau du même type arrive.
+
+### Conséquences
+- ➕ Cycle de vie explicite, lisible par tous (vendeur, comptable, dev)
+- ➕ Re-déclenchement uniquement sur action vendeur explicite (pas sur chaque modif aléatoire de fichier) → évite des re-analyses inutiles
+- ➕ Le statut est visible dans SF → le vendeur sait où en est son dossier (transparence)
+- ➕ Compatible avec le dashboard comptable (filtre `Statut_dossier__c = en_attente_validation_comptable`)
+- ➖ Demande à Salesforce admin : 1 picklist + 1 trigger + 1 bouton UI vendeur (effort moyen, 1-2 jours admin SF)
+- ➖ Discipline vendeur requise : il doit penser à cliquer "J'ai corrigé" après ses modifs. Si oublié, le dossier reste bloqué en `en_anomalie_a_corriger`. À atténuer par : reminder mail au bout de N jours, ou trigger auto sur modif fichier.
+
+### Indicateurs à monitorer (Phase 6)
+- Taux de dossiers bloqués > 7 jours en `en_anomalie_a_corriger` (= vendeur a oublié de cliquer)
+- Nombre moyen de boucles par dossier (combien de fois un même dossier repasse en analyse)
+- Coût IA moyen / dossier (cible < 0,50 €) — si trop, optimiser dédup ou passer en cible
+
+---
+
+## ADR-016 — Dashboard comptable Streamlit pour la validation humaine
 
 **Date** : 2026-05-13
 **Statut** : Acceptée
 
 ### Contexte
-Salesforce ne supprime pas l'ancien fichier quand un vendeur en uploade un nouveau : les deux coexistent comme records `NEILON__File__c` distincts liés à l'opportunité. Le workflow v1 récupère **tous** les fichiers de l'opportunité et les envoie à l'IA → l'ancien BDC fautif est analysé en même temps que le nouveau corrigé. De plus, `Tech_Dossier_verifier__c = TRUE` après la première analyse, et rien ne déclenche une ré-analyse quand un nouveau fichier arrive.
-
-**Conséquences en v1** :
-- Faux positifs persistants : l'anomalie de l'ancien BDC continue de remonter même après correction
-- Pas de re-déclenchement automatique : le vendeur qui corrige doit demander une ré-analyse manuelle
+ADR-013 impose une validation humaine systématique par le comptable HESS avant tout envoi mail vendeur. Avec 1000 dossiers/jour, gérer cette validation par email serait ingérable (boîte saturée, oublis, pas de vue d'ensemble, pas de capacité d'édition fine des anomalies). Il faut un **outil dédié**.
 
 ### Décision
-Approche progressive en 3 niveaux. **Démarrer au Niveau 1 (MVP simple)**, faire évoluer si nécessaire.
+Créer un **dashboard comptable web** où le comptable peut :
+1. Voir la liste des dossiers en attente de validation, triés par priorité (date, marque, indice de confiance)
+2. Ouvrir un dossier → preview des PDFs + verdict IA + liste d'anomalies
+3. **Éditer la liste d'anomalies** : ajouter (faux négatif IA), retirer (faux positif IA), modifier
+4. **Inverser le verdict** si le comptable n'est pas d'accord avec l'IA
+5. Cliquer "Valider et envoyer" → déclenche le mail vendeur avec la version **finale** + update SF
+6. Voir les stats : combien analysés, validés, en attente, taux d'accord IA/comptable
 
-**Niveau 1 — MVP simple (Phase 5)**
+### Stack — Streamlit
+- Python 3.12 (cohérent avec l'API)
+- Connexion lecture/écriture à Supabase (table `analyses`, `validations`)
+- Appelle l'API `POST /validation/{analyse_id}` pour déclencher l'envoi mail
+- Auth : magic link email HESS (via Supabase Auth) ou simple token partagé pour démarrer
 
-- **Trigger Salesforce (admin)** : quand un `NEILON__File__c` est créé sur une `Opportunity` qui a `Leasing_electrique__c = TRUE` ET `Tech_Dossier_verifier__c = TRUE`, repasser `Tech_Dossier_verifier__c = FALSE` (ce qui replace l'opp dans la queue n8n).
-- **Côté API** : analyser tous les fichiers reçus. Au moment du verdict, **dédupliquer côté Python** : si plusieurs documents du même type (`type_document`) sont détectés, garder le plus récent (`CreatedDate` du `NEILON__File__c`).
-- **Logging** : tracer le nombre de doublons écartés par dossier dans `analyses.documents_manquants` ou un champ dédié, pour suivi monitoring.
+### Alternatives écartées
+- **React/Next.js** : 5-10× plus long à développer pour un MVP interne (1-5 utilisateurs). À envisager si on doit l'ouvrir à des externes plus tard.
+- **Emails de validation avec liens cliquables** : ne scale pas, pas d'édition fine, pas de stats
+- **Salesforce custom UI** : nécessite Apex/LWC, expertise SF lourde, lock-in fort
 
-**Niveau 2 — MVP intelligent (post-MVP, si coût IA trop élevé)**
-
-- L'API filtre **avant** d'envoyer à Gemini : pour chaque opp, ne charger que le `NEILON__File__c` le plus récent par type déduit (à partir du nom de fichier si renommé par IA, sinon nécessite une 1ère passe de classification rapide).
-- Économise des tokens en évitant de ré-analyser les fichiers obsolètes.
-
-**Niveau 3 — Cible (si Phase 4 backtest montre des limites Niveaux 1/2)**
-
-- Salesforce admin ajoute le champ picklist `Type_document__c` (ADR-014) ET un champ booléen `Obsolete__c` sur `NEILON__File__c`.
-- Trigger SF : "quand un fichier de type X est ajouté à une opp, marquer les autres fichiers de type X de cette opp comme `Obsolete = TRUE`".
-- L'API filtre dans sa SOQL : `WHERE Obsolete__c = FALSE`.
-- Avantage : la déduplication est faite en SF, le record reste accessible (pour audit) mais ignoré en analyse.
-
-### Schéma de fonctionnement (Niveau 1)
+### Structure technique
 
 ```
-Vendeur upload BDC corrigé
-   ▼
-NEILON__File__c créé (l'ancien reste en base)
-   ▼
-Trigger SF : Tech_Dossier_verifier__c = TRUE → FALSE
-   ▼
-n8n détecte l'opp à retraiter (prochain cycle)
-   ▼
-API analyse tous les NEILON__File__c
-   ▼
-Pour chaque type détecté : keep most recent by CreatedDate
-   ▼
-Verdict basé uniquement sur les fichiers les plus récents
+app_dashboard/
+├── streamlit_app.py        # entrée principale
+├── pages/
+│   ├── 1_📥_En_attente.py   # liste des dossiers à valider
+│   ├── 2_✅_Valides.py       # historique récent
+│   └── 3_📊_Stats.py        # métriques IA/comptable
+├── services/
+│   ├── supabase.py          # client Supabase (lit analyses, update validations)
+│   └── api.py               # appelle /validation/{id} de l'API
+└── components/
+    ├── dossier_card.py      # composant carte dossier
+    ├── anomalies_editor.py  # éditeur de liste d'anomalies
+    └── pdf_viewer.py        # preview PDF embarqué
 ```
+
+### Nouvelle table Supabase
+
+```sql
+CREATE TABLE validations (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    analyse_id          UUID NOT NULL REFERENCES analyses(id),
+    opportunity_id      TEXT NOT NULL,
+    statut              TEXT NOT NULL,        -- 'en_attente' | 'validee_conforme' | 'validee_non_conforme'
+    decision_comptable  TEXT,                 -- 'confirme_ia' | 'inverse_ia' | 'modifie'
+    anomalies_finales   JSONB NOT NULL,       -- liste finale après édition
+    anomalies_ajoutees  JSONB,                -- ce que l'IA avait raté
+    anomalies_retirees  JSONB,                -- faux positifs IA
+    comptable_email     TEXT,
+    notes               TEXT,
+    cree_le             TIMESTAMPTZ NOT NULL DEFAULT now(),
+    valide_le           TIMESTAMPTZ
+);
+```
+
+### Endpoints API à ajouter (Phase 3+)
+
+- `GET /validation/en-attente` : liste paginée des analyses sans validation
+- `GET /validation/{analyse_id}` : détail d'un dossier (analyse + PDFs URLs)
+- `POST /validation/{analyse_id}` : valider, payload `{decision, anomalies_finales, notes}` → déclenche mail vendeur via n8n
 
 ### Conséquences
-- ➕ Niveau 1 : déploiement rapide, 1 trigger SF + un peu de Python. Aucun changement côté vendeur.
-- ➕ Aucun faux positif lié à un ancien fichier corrigé
-- ➕ Re-déclenchement automatique = vendeur n'a rien à demander manuellement
-- ➖ Coût IA augmenté (chaque ajout de fichier = re-analyse complète) — acceptable au MVP, ~30-50% de tokens en plus selon la fréquence des corrections
-- ➖ Niveau 1 dépend de la qualité de détection du `type_document` par Gemini (si confusion, mauvaise dédup) — d'où le passage en Niveau 3 si nécessaire
+- ➕ UX comptable bien meilleure que des emails
+- ➕ Métriques d'amélioration IA en temps réel (taux d'accord IA/comptable par marque/concession)
+- ➕ Dataset doré généré automatiquement (anomalies ajoutées/retirées) → input direct pour itérer sur les prompts
+- ➕ Hébergement simple sur Render (à côté de l'API) ou Streamlit Cloud
+- ➖ Code supplémentaire à maintenir (~500-1000 lignes)
+- ➖ Auth à gérer proprement (magic link Supabase Auth — gratuit en plan free)
 
-### Indicateur à monitorer (Phase 6)
-- Taux de ré-analyses par opportunité (moyenne) — si > 3, voir si on peut tagger le doc comme "version finale" avant envoi
-- Taux de doublons écartés par dossier
-- Si coût IA / dossier > 0,50 € (cible de la roadmap) à cause des ré-analyses → passer Niveau 2 ou 3
+### Roadmap impact
+Nouvelle **Phase 5b — Dashboard comptable** entre Phase 5 (intégration n8n) et Phase 6 (roll-out). Estimation 3-5 jours de dev pour un MVP fonctionnel. À détailler dans `phase-5b-dashboard-comptable.md` quand on s'y attaquera.
+
+---
+
+## ADR-017 — Règles de refus d'office : bypass IA + bypass comptable, mail vendeur direct
+
+**Date** : 2026-05-13
+**Statut** : Acceptée
+
+### Contexte
+Certains dossiers ne nécessitent **aucune analyse IA** ni **aucune validation comptable** parce que la règle qui les rend invalides est binaire, claire et incontestable. Exemple : un dossier rattaché à la concession "Siège" HESS est une erreur de saisie pure — pas la peine de gaspiller des tokens IA ni de surcharger le comptable.
+
+Faire passer ces cas dans le pipeline standard (IA → dashboard comptable → mail) gaspille :
+- Des tokens Gemini (~0,02-0,05 € par dossier)
+- Du temps comptable (1-2 min par dossier × volume)
+- De la latence (le vendeur attend des heures pour une info évidente)
+
+### Décision
+Créer un mécanisme de **refus d'office** : vérification déterministe en amont de l'appel Gemini. Si une règle matche, on court-circuite tout le pipeline :
+
+```
+Verdict = "refus_office"
+Mail vendeur direct (CC comptable pour audit)
+Update SF Statut_dossier__c = en_anomalie_a_corriger
+FIN
+```
+
+### Implémentation
+
+**Phase 3 (API)** :
+- Module `app/core/refus_office.py` avec fonction `check_refus_office(opportunity) -> RefusOffice | None`
+- Appelé **avant** l'appel Gemini dans `/analyze`
+- Si match → retourner directement le verdict sans appeler Gemini
+- Type Pydantic dédié `RefusOffice` : `{ regle: str, libelle: str, message_vendeur: str }`
+
+**Phase 5 (n8n + template mail)** :
+- Workflow secondaire `Leasing_v2_refus_office` : envoie un mail spécifique au vendeur (template HTML `mail_refus_office.html`)
+- CC comptable pour audit (pas de validation requise, info uniquement)
+- Update SF en une seule transaction
+
+### Règles de refus d'office (à coder en Phase 3, liste évolutive)
+
+| Code | Condition | Message vendeur |
+|------|-----------|-----------------|
+| `R001_siege` | `Concession_du_proprietaire__c == 'Siège'` | "Le dossier doit être rattaché à un point de vente, pas au Siège HESS. Merci de modifier la concession dans Salesforce et de redéposer." |
+| `R002_avant_dispositif` (à valider) | `CloseDate < 2025-09-30` | "Le dispositif Leasing Social n'est entré en vigueur que le 30/09/2025." |
+| _futures règles_ | _à acter au fur et à mesure_ | _selon le cas_ |
+
+La liste est volontairement **conservatrice** : on n'ajoute une règle de refus d'office que si elle est **100% binaire** et **incontestable**. Tout cas ambigu doit rester dans le flow IA + comptable pour ne pas créer de faux négatifs définitifs.
+
+### Conséquences
+- ➕ Économie de tokens IA et de temps comptable sur les cas évidents
+- ➕ Réactivité maximale pour le vendeur (mail immédiat)
+- ➕ Code testable unitairement (pas d'IA dans la boucle)
+- ➖ Risque si on ajoute une règle trop large et qu'elle bloque des dossiers valides — d'où la conservatisme
+- ➖ Le comptable ne valide pas, donc moins de boucle d'apprentissage sur ces cas — acceptable car les règles sont triviales
+
+### Lien avec ADR-013 (validation humaine systématique)
+Exception explicite : ADR-013 impose la validation comptable pour les verdicts `conforme` et `non_conforme`. Le verdict `refus_office` est **un 5e statut séparé**, hors du périmètre de la validation comptable. Le comptable est informé en CC mais n'a rien à valider.
+
+### Statuts SF à supporter (extension de ADR-015)
+Ajout d'une transition possible dans le cycle de vie :
+- `nouveau` / `corrige_a_reverifier` → API détecte refus d'office → `en_anomalie_a_corriger` directement (skip `en_attente_validation_comptable`)
 
 ---
 

@@ -25,8 +25,9 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
-import google.generativeai as genai
 from cryptography.fernet import Fernet
+from google import genai
+from google.genai import types
 
 from app.config import get_settings
 from app.utils.logging import get_logger, setup_logging
@@ -123,21 +124,23 @@ def decrypt_pdf(encrypted_path: Path, fernet: Fernet) -> bytes:
 
 
 def analyze_pdf_with_gemini(
-    model: genai.GenerativeModel,
+    client: genai.Client,
+    model_name: str,
     pdf_bytes: bytes,
     max_retries: int = 2,
 ) -> dict[str, Any] | None:
     """Envoie un PDF à Gemini avec le prompt d'exploration. Parse JSON ou None."""
+    text = ""
     for attempt in range(1, max_retries + 1):
         try:
-            response = model.generate_content(
-                [
+            response = client.models.generate_content(
+                model=model_name,
+                contents=[
+                    types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"),
                     EXPLORATION_PROMPT,
-                    {"mime_type": "application/pdf", "data": pdf_bytes},
                 ],
-                request_options={"timeout": 90},
             )
-            text = response.text.strip()
+            text = (response.text or "").strip()
             # Tolérance : supprimer un éventuel fence ```json
             if text.startswith("```"):
                 text = text.split("\n", 1)[1] if "\n" in text else text
@@ -150,7 +153,7 @@ def analyze_pdf_with_gemini(
                 "gemini_json_invalid",
                 attempt=attempt,
                 error=str(exc),
-                preview=text[:200] if "text" in locals() else "",
+                preview=text[:200],
             )
         except Exception as exc:
             log.warning("gemini_call_failed", attempt=attempt, error=str(exc))
@@ -161,7 +164,8 @@ def analyze_pdf_with_gemini(
 
 def process_manifest(
     manifest: dict[str, Any],
-    model: genai.GenerativeModel | None,
+    client: genai.Client | None,
+    model_name: str,
     fernet: Fernet,
     output_fh: Any,
 ) -> int:
@@ -183,7 +187,7 @@ def process_manifest(
             "file_size_bytes": file_meta.get("size_bytes"),
         }
 
-        if model is None:
+        if client is None:
             result_entry["analysis"] = None
             result_entry["mode"] = "no-llm"
         else:
@@ -193,7 +197,7 @@ def process_manifest(
                 log.error("decrypt_failed", path=str(encrypted_path), error=str(exc))
                 continue
 
-            analysis = analyze_pdf_with_gemini(model, pdf_bytes)
+            analysis = analyze_pdf_with_gemini(client, model_name, pdf_bytes)
             result_entry["analysis"] = analysis
             result_entry["mode"] = "llm"
             if analysis:
@@ -237,21 +241,20 @@ def main() -> int:
 
     fernet = get_fernet(settings.dataset_encryption_key)
 
-    model: genai.GenerativeModel | None = None
+    client: genai.Client | None = None
     if not args.no_llm:
         if not settings.gemini_api_key:
             log.error("gemini_api_key_missing")
             return 1
-        genai.configure(api_key=settings.gemini_api_key)
-        model = genai.GenerativeModel(args.model)
-        log.info("gemini_model_ready", model=args.model)
+        client = genai.Client(api_key=settings.gemini_api_key)
+        log.info("gemini_client_ready", model=args.model)
 
     DATASET_ROOT.mkdir(exist_ok=True)
     total_success = 0
     with EXPLORATION_OUTPUT.open("a", encoding="utf-8") as fh:
         for i, manifest in enumerate(sampled, 1):
             try:
-                success = process_manifest(manifest, model, fernet, fh)
+                success = process_manifest(manifest, client, args.model, fernet, fh)
                 total_success += success
                 if i % 10 == 0:
                     log.info("progress", processed=i, total=len(sampled), success=total_success)
@@ -268,8 +271,8 @@ def main() -> int:
         files_analyzed_success=total_success,
         output=str(EXPLORATION_OUTPUT),
     )
-    print(f"\n✅ Sortie : {EXPLORATION_OUTPUT.resolve()}")
-    print("Étape suivante : rédiger `dossier-formats-par-marque.md` à partir de ce JSONL.")
+    print(f"\nSortie : {EXPLORATION_OUTPUT.resolve()}")
+    print("Etape suivante : rediger `dossier-formats-par-marque.md` a partir de ce JSONL.")
     return 0
 
 

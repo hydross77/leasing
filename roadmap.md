@@ -242,14 +242,41 @@ Si la précision est en dessous : retour Phase 2/3 pour itérer sur prompts ou r
   - Update SF final : `Tech_Dossier_verifier__c`, `Conformite_du_dossier__c`, `Date_livraison_definitive__c`
 - [ ] Mode shadow : v2 tourne mais **n'envoie pas de mail** au début, seulement log les verdicts pour comparaison avec v1
 
-### Human-in-the-loop pour les non_conformes (ADR-013)
+### Human-in-the-loop systématique via dashboard comptable (ADR-013 rév + ADR-016)
 
-- [ ] Nouveau champ SF `Statut_validation_humaine__c` (picklist)
-- [ ] Workflow `Leasing_v2` route les `non_conforme` vers mail interne **uniquement** (pas de mail concession à ce stade)
-- [ ] Mail interne avec 2 liens cliquables : `Approuver` (déclenche envoi concession) / `Rejeter` (log + retour en attente)
-- [ ] Endpoint API ou webhook n8n `POST /validation/{opportunity_id}` pour traiter la décision
-- [ ] Workflow secondaire `Leasing_v2_envoi_concession` déclenché sur `validée`
-- [ ] Reporting : taux de rejet humain par marque / concession → indicateur de qualité IA
+- [ ] Nouveau champ SF `Statut_validation_humaine__c` (picklist : `en_attente` / `validee_conforme` / `validee_non_conforme`)
+- [ ] Workflow `Leasing_v2` : **ne PAS envoyer de mail vendeur**, écrit l'analyse en base avec `statut_validation = en_attente`
+- [ ] Endpoint API `POST /validation/{analyse_id}` : reçoit la décision comptable (depuis le dashboard), met à jour Supabase, déclenche le mail vendeur via webhook n8n
+- [ ] Workflow secondaire `Leasing_v2_envoi_vendeur` déclenché par webhook après validation
+- [ ] Reporting : taux d'accord IA/comptable par marque/concession → indicateur de qualité IA
+
+---
+
+## Phase 5b — Dashboard comptable (Streamlit) ⏳
+
+**Objectif** : créer l'outil de validation interne du comptable HESS avant tout envoi mail vendeur (cf ADR-016).
+
+**Durée estimée** : 3 à 5 jours.
+
+**Pré-requis** : API `/validation/*` opérationnelle (Phase 3), table `validations` créée en Supabase.
+
+### Livrables
+
+- [ ] App Streamlit `app_dashboard/streamlit_app.py` avec 3 pages :
+  - **📥 En attente** : liste des dossiers à valider, ouverture détail
+  - **✅ Validés** : historique récent + recherche
+  - **📊 Stats** : taux d'accord IA/comptable, par marque, par concession, par jour
+- [ ] Composant `dossier_card` : verdict IA, indice de confiance, résumé anomalies
+- [ ] Composant `anomalies_editor` : checkbox ajouter/retirer + ajout libre
+- [ ] Composant `pdf_viewer` : preview PDF embarqué (avec streaming Supabase signed URL)
+- [ ] Auth : magic link Supabase Auth (email HESS uniquement)
+- [ ] Déploiement sur Render (Web Service séparé) ou Streamlit Cloud
+- [ ] Documentation utilisateur courte (`docs/dashboard-guide.md`) pour le comptable
+
+### Critères de succès
+- Le comptable peut traiter 100 dossiers en moins d'1 heure
+- Tous les boutons "Valider et envoyer" déclenchent correctement le mail vendeur + update SF
+- Métriques temps réel correctes (vérifiables via SQL Supabase)
 
 ### Workflows annexes Phase 5 (depuis PDF v2)
 

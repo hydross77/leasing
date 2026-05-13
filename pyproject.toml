@@ -24,7 +24,8 @@ dependencies = [
     # Salesforce (Phase 1 — extraction des dossiers gagnés)
     "simple-salesforce>=1.12",
     # IA (Phase 1 analyse exploratoire + Phase 3 prod)
-    "google-generativeai>=0.8",
+    # google-genai = nouveau SDK officiel (google-generativeai est deprecated)
+    "google-genai>=1.0",
     "openai>=1.55",
     # PDF / images (Phase 1 + Phase 3)
     "pypdf>=5.1",
