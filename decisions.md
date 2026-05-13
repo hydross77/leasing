@@ -403,70 +403,104 @@ Le RIB ayant été retiré des obligatoires (cf `glossaire.md` et PDF v2 page 3)
 
 ---
 
-## ADR-015 — Cycle de vie SF du dossier + ré-analyses sur changement de statut
+## ADR-015 — Cycle de vie SF via les champs existants (pas de nouveau champ)
 
-**Date** : 2026-05-13 (rév. 2026-05-13 — écoute du statut, pas du fichier)
+**Date** : 2026-05-13 (rév. 2026-05-13 — découverte que SF fait déjà le job nativement)
 **Statut** : Acceptée
 
 ### Contexte
-Quand l'IA + le comptable concluent que le dossier est en anomalie, le mail au vendeur dit "redéposer le fichier en anomalie sur Salesforce". **Le vendeur ne crée pas un nouveau dossier** — il modifie le dossier existant dans SF (corrige le fichier qui pose souci, change le statut). Notre système doit donc **écouter le statut SF du dossier**, pas seulement les modifications de fichiers individuels.
+Quand l'IA + le comptable concluent que le dossier est en anomalie, le mail au vendeur dit "modifier le dossier dans Salesforce". Le vendeur ne crée pas un nouveau dossier, il modifie le dossier existant.
 
-Par ailleurs, Salesforce ne supprime pas l'ancien `NEILON__File__c` quand le vendeur en uploade un nouveau : les deux coexistent. L'API doit dédupliquer côté Python pour ne garder que le plus récent par type de document.
+Initialement (révision précédente de cet ADR), on prévoyait de créer un champ custom `Statut_dossier__c` + un trigger SF + un bouton UI vendeur. **Inutile** : SF gère déjà tout nativement.
+
+### Découverte clé (2026-05-13)
+- `Tech_Dossier_verifier__c` (champ existant, booléen) **se décoche automatiquement** par SF dès qu'un fichier `NEILON__File__c` est modifié sur l'opportunité. Mécanisme natif, pas de trigger custom à écrire.
+- `Conformite_du_dossier__c` (champ existant, picklist) contient déjà toutes les valeurs nécessaires : `- Aucun -` / `Client inéligible` / `Document absent ou à corriger` / `Bon pour livraison` / `Dossier conforme après la livraison`.
 
 ### Décision
 
-**1. Cycle de vie d'un dossier dans Salesforce** — nouveau champ picklist `Statut_dossier__c` sur `Opportunity` :
+**1. On utilise les 2 champs SF existants** (pas de demande admin SF) :
 
-| Valeur | Sens | Qui la change | n8n re-déclenche `/analyze` ? |
-|--------|------|---------------|--------------------------------|
-| `nouveau` | Vendeur vient d'uploader, jamais analysé | Vendeur (à création) | ✅ Oui |
-| `en_cours_analyse` | n8n a verrouillé pour traitement | n8n | Non (lui-même) |
-| `en_attente_validation_comptable` | Analyse faite, attend le comptable dans le dashboard | API (après `/analyze`) | Non |
-| `valide_conforme` | Comptable a validé, mail envoyé | Dashboard / API `/validation` | Non (FIN) |
-| `en_anomalie_a_corriger` | Comptable a rejeté, mail envoyé au vendeur | Dashboard / API `/validation` | Non (attend vendeur) |
-| `corrige_a_reverifier` | Vendeur a corrigé, demande ré-analyse | Vendeur (bouton SF) ou trigger auto | ✅ Oui |
+| Champ | Notre rôle |
+|-------|------------|
+| `Tech_Dossier_verifier__c` | Signal "à (re-)analyser" — lu par n8n, repassé à TRUE par l'API après validation comptable |
+| `Conformite_du_dossier__c` | Verdict final visible côté SF |
 
-**2. Trigger SF (sujet admin)** : à chaque changement de `Statut_dossier__c` vers `nouveau` ou `corrige_a_reverifier`, mettre `Tech_Dossier_verifier__c = FALSE` → le dossier réintègre la queue n8n.
+**2. Mapping verdict interne ↔ valeur SF picklist** :
 
-**3. Action vendeur** : un bouton/UI custom dans SF "J'ai corrigé le dossier" qui passe `Statut_dossier__c` de `en_anomalie_a_corriger` → `corrige_a_reverifier`. **Optionnel** : un trigger qui automatise ce passage si un `NEILON__File__c` est modifié sur une opp en `en_anomalie_a_corriger`.
+| Notre `Verdict.statut` | Valeur écrite dans `Conformite_du_dossier__c` |
+|------------------------|------------------------------------------------|
+| `refus_office` | `Client inéligible` |
+| `non_conforme` | `Document absent ou à corriger` |
+| `conforme` | `Bon pour livraison` |
+| `erreur_technique` | Inchangé (re-tente prochain cycle) |
+| `aucun_doc` | Inchangé + alerte Sentry |
 
-**4. Déduplication côté API** : analyser tous les `NEILON__File__c` reçus, mais au moment du verdict, ne garder que le plus récent par `type_document` détecté (basé sur `CreatedDate`). Tracer les doublons écartés dans le log d'analyse.
+**3. SOQL de production** :
 
-### Schéma simplifié
-
-```
-[nouveau / corrige_a_reverifier]
-        ↓ trigger SF : Tech_Dossier_verifier__c = FALSE
-        ↓
-        n8n détecte → passe à [en_cours_analyse] → API /analyze
-        ↓
-        [en_attente_validation_comptable]
-        ↓ Dashboard comptable clic
-   ┌────┴────┐
-   ↓         ↓
-[valide]   [en_anomalie_a_corriger]
-  FIN       ↓ Vendeur corrige + clique "J'ai corrigé"
-            ↓
-            [corrige_a_reverifier] → boucle au début
+```sql
+SELECT ...
+FROM Opportunity
+WHERE Leasing_electrique__c = TRUE
+  AND Tech_Dossier_verifier__c = FALSE
+  AND StageName = '4- Gagné'
+  AND Conformite_du_dossier__c NOT IN (
+    'Bon pour livraison',
+    'Dossier conforme après la livraison',
+    'Client inéligible'
+  )
+  AND Concession_du_proprietaire__c != 'Siège'
 ```
 
-### Évolution progressive
+**4. Déduplication côté API** : analyser tous les `NEILON__File__c` reçus, mais au moment du verdict, ne garder que le plus récent par `type_document` détecté par Gemini (basé sur `CreatedDate`).
 
-- **Phase 5 (MVP)** : champ `Statut_dossier__c` + trigger SF + UI vendeur basique. Dédup côté API en gardant le plus récent par type Gemini.
-- **Post-MVP** : si trop de doublons mal gérés, ajouter le champ `Obsolete__c` sur `NEILON__File__c` (cf ADR-014 picklist `Type_document__c`) avec trigger SF qui marque les anciens comme obsolètes quand un nouveau du même type arrive.
+### Flow complet
+
+```
+Vendeur upload dossier sur SF
+   ↓
+SF : Tech_Dossier_verifier__c = FALSE (par défaut)
+   ↓
+n8n cron : SOQL → trouve l'opp
+   ↓
+n8n → API /analyze
+   ↓
+API : refus_office.check → si match : Conformite_du_dossier__c = 'Client inéligible' + mail vendeur direct, FIN
+   ↓
+Sinon : Gemini → verification.py → écrit verdict en base Supabase (statut_validation = en_attente)
+   ↓
+Comptable ouvre le dashboard → édite anomalies → clique "Valider"
+   ↓
+Dashboard → API /validation :
+   - écrit dans Supabase (table validations)
+   - patch SF : Conformite_du_dossier__c = (valeur mappée) + Tech_Dossier_verifier__c = TRUE
+   - déclenche webhook n8n → mail vendeur final
+   ↓
+Si vendeur corrige un fichier dans SF :
+   ↓
+SF (natif) : Tech_Dossier_verifier__c = FALSE
+   ↓
+Retour au début (n8n picke au prochain cycle)
+```
+
+### Ce qui change par rapport à la version précédente de cet ADR
+- ❌ Plus de création du champ `Statut_dossier__c` à demander à Renzo
+- ❌ Plus de trigger SF custom à écrire (le décochage auto de `Tech_Dossier_verifier__c` est natif)
+- ❌ Plus de bouton "J'ai corrigé" dans l'UI vendeur SF
+- ✅ On n'utilise QUE les champs SF existants
 
 ### Conséquences
-- ➕ Cycle de vie explicite, lisible par tous (vendeur, comptable, dev)
-- ➕ Re-déclenchement uniquement sur action vendeur explicite (pas sur chaque modif aléatoire de fichier) → évite des re-analyses inutiles
-- ➕ Le statut est visible dans SF → le vendeur sait où en est son dossier (transparence)
-- ➕ Compatible avec le dashboard comptable (filtre `Statut_dossier__c = en_attente_validation_comptable`)
-- ➖ Demande à Salesforce admin : 1 picklist + 1 trigger + 1 bouton UI vendeur (effort moyen, 1-2 jours admin SF)
-- ➖ Discipline vendeur requise : il doit penser à cliquer "J'ai corrigé" après ses modifs. Si oublié, le dossier reste bloqué en `en_anomalie_a_corriger`. À atténuer par : reminder mail au bout de N jours, ou trigger auto sur modif fichier.
+- ➕ Zéro travail Salesforce admin requis (énorme gain de temps)
+- ➕ Comportement natif SF = plus fiable qu'un trigger custom
+- ➕ Aucune discipline vendeur requise (pas de bouton à ne pas oublier)
+- ➕ Le vendeur voit `Conformite_du_dossier__c` directement dans l'UI Opportunity → transparence
+- ➖ Moins de granularité que prévue initialement (on ne distingue plus `en_cours_analyse` vs `en_attente_validation_comptable` côté SF — cette info reste interne à Supabase)
+- ➖ La granularité interne (statut Supabase) est invisible côté SF — acceptable, le comptable utilise le dashboard pour ça
 
 ### Indicateurs à monitorer (Phase 6)
-- Taux de dossiers bloqués > 7 jours en `en_anomalie_a_corriger` (= vendeur a oublié de cliquer)
-- Nombre moyen de boucles par dossier (combien de fois un même dossier repasse en analyse)
-- Coût IA moyen / dossier (cible < 0,50 €) — si trop, optimiser dédup ou passer en cible
+- Taux de dossiers bloqués > 7 jours en `Conformite_du_dossier__c = 'Document absent ou à corriger'` (= vendeur a oublié de corriger)
+- Nombre moyen de boucles par dossier
+- Coût IA moyen / dossier (cible < 0,50 €)
 
 ---
 
@@ -479,13 +513,20 @@ Par ailleurs, Salesforce ne supprime pas l'ancien `NEILON__File__c` quand le ven
 ADR-013 impose une validation humaine systématique par le comptable HESS avant tout envoi mail vendeur. Avec 1000 dossiers/jour, gérer cette validation par email serait ingérable (boîte saturée, oublis, pas de vue d'ensemble, pas de capacité d'édition fine des anomalies). Il faut un **outil dédié**.
 
 ### Décision
-Créer un **dashboard comptable web** où le comptable peut :
+Créer un **dashboard comptable web qui sert de back-office unique** pour Axel — il n'a idéalement jamais besoin d'ouvrir Salesforce directement. Le dashboard pilote tout via l'API FastAPI qui synchronise SF en arrière-plan.
+
+**Fonctions** :
 1. Voir la liste des dossiers en attente de validation, triés par priorité (date, marque, indice de confiance)
-2. Ouvrir un dossier → preview des PDFs + verdict IA + liste d'anomalies
+2. Ouvrir un dossier → preview des PDFs + verdict IA + liste d'anomalies + détails opp SF
 3. **Éditer la liste d'anomalies** : ajouter (faux négatif IA), retirer (faux positif IA), modifier
 4. **Inverser le verdict** si le comptable n'est pas d'accord avec l'IA
 5. Cliquer "Valider et envoyer" → déclenche le mail vendeur avec la version **finale** + update SF
-6. Voir les stats : combien analysés, validés, en attente, taux d'accord IA/comptable
+6. **Changer `StageName`** depuis le dashboard (4-Gagné → 5-Perdu, etc.) — synchronisé SF
+7. **Override manuel `Conformite_du_dossier__c`** (cas d'urgence ou correction) — synchronisé SF
+8. **Forcer une ré-analyse** d'un dossier (décoche `Tech_Dossier_verifier__c`)
+9. Voir les stats : combien analysés, validés, en attente, taux d'accord IA/comptable, par marque, par jour
+
+**Principe architectural** : Streamlit n'appelle **jamais** Salesforce directement. Toute écriture SF passe par l'API FastAPI (centralisation logique métier, cohérence, audit).
 
 ### Stack — Streamlit
 - Python 3.12 (cohérent avec l'API)
@@ -613,6 +654,161 @@ Exception explicite : ADR-013 impose la validation comptable pour les verdicts `
 ### Statuts SF à supporter (extension de ADR-015)
 Ajout d'une transition possible dans le cycle de vie :
 - `nouveau` / `corrige_a_reverifier` → API détecte refus d'office → `en_anomalie_a_corriger` directement (skip `en_attente_validation_comptable`)
+
+---
+
+## ADR-018 — Défense en profondeur face aux changements de format documents
+
+**Date** : 2026-05-13
+**Statut** : Acceptée
+
+### Contexte
+Les marques (Fiat, Renault, etc.) et leurs filiales financières (Stellantis Finance, RCI, Hyundai Capital, etc.) peuvent **changer le format de leurs documents** sans prévenir HESS : refonte BDC, nouveau template contrat, nouveau libellé "Prix TTC", etc.
+
+Risques associés :
+- Le prompt spécifique de la marque ne reconnaît plus certains champs → indice de confiance chute
+- L'IA peut halluciner (deviner) ou rater des anomalies → faux positifs / faux négatifs en cascade
+- Sans filet, des centaines de dossiers partent en erreur en production
+
+### Décision
+Empiler **5 niveaux de filet** indépendants pour garantir qu'aucun dossier ne sorte erroné même en cas de changement de format complet.
+
+### Les 5 niveaux
+
+#### Niveau 1 — Cascade de prompts (cf ADR-005)
+
+Résolution automatique : `(marque, concession)` → `(marque, NULL)` → `('default', NULL)`. Si le prompt spécifique d'une concession est obsolète, on tombe sur le prompt marque générique. Si lui aussi est obsolète, on tombe sur le `default`. Aucun dossier ne plante par manque de prompt.
+
+#### Niveau 2 — Validation Pydantic stricte (cf ADR-009)
+
+Si Gemini renvoie du JSON cassé ou avec des champs hallucinés :
+- Retry 2x avec backoff exponentiel (1s, 4s)
+- Si toujours invalide → verdict `erreur_technique` (jamais "conforme" par défaut)
+- Logging structuré du prompt + réponse brute pour debug
+
+#### Niveau 3 — Indice de confiance auto-calculé
+
+Si Gemini extrait peu de champs (parce que le libellé a changé), l'indice de confiance baisse mécaniquement. Le dashboard comptable (ADR-016) trie les dossiers à faible confiance **en haut de la queue** pour qu'ils soient revus en priorité.
+
+#### Niveau 4 — Détection de drift par marque/concession (à coder Phase 6)
+
+Surveillance automatique des métriques par marque :
+- Taux d'accord IA / comptable (cf ADR-016)
+- Taux d'extraction réussie des champs critiques (`prix_ttc`, `loyer_hors_options`, `nature_bdc`)
+- Indice de confiance moyen
+
+Si une marque chute brutalement (ex: -27 points en 7 jours), **alerte Sentry** : "drift Fiat détecté sur BDC, le prompt v1 doit être révisé". Toi/Renzo écrivez alors un prompt v2, vous le pushez en base Supabase (toggle `actif = TRUE`), pas besoin de redéployer le code.
+
+#### Niveau 5 — Filet ultime : validation comptable systématique (cf ADR-013)
+
+**Aucun mail vendeur ne part sans clic comptable**, peu importe le verdict IA. Donc même si l'IA est complètement dans les choux pendant 2 jours à cause d'un nouveau format Fiat :
+- ❌ Aucun vendeur ne reçoit de mail erroné
+- ✅ Le comptable corrige manuellement les anomalies / inverse les verdicts dans le dashboard
+- ✅ Il signale qu'il faut adapter le prompt
+- ✅ La donnée de correction alimente automatiquement le dataset d'amélioration
+
+### Scénario nominal de gestion d'un changement de format
+
+```
+J : Fiat sort un nouveau BDC v3 chez Fiat Mulhouse
+J+1 : 3 dossiers Fiat Mulhouse arrivent
+  ↓
+  API analyse via le prompt (fiat, NULL, extraction_bdc) — fallback marque
+  ↓
+  Indice de confiance Fiat Mulhouse chute : 92% → 60%
+  ↓
+  Dashboard comptable : ces dossiers remontent en haut de la queue
+  ↓
+  Comptable valide manuellement, indique "Mulhouse a un nouveau BDC"
+  ↓
+  Sentry alerte automatiquement après 5 dossiers similaires
+  ↓
+J+3 : Toi/Renzo regardez le nouveau BDC Mulhouse
+J+4 : Écrivez un nouveau prompt (fiat, Fiat Mulhouse, extraction_bdc) v1
+J+5 : UPSERT dans Supabase, actif=TRUE
+       → la cascade prend immédiatement le nouveau prompt
+       → pas de redéploiement, pas d'interruption
+J+6 : Précision Fiat Mulhouse remonte à 95%+
+```
+
+### Constat stabilisateur
+
+Sur les ~15 types de documents d'un dossier :
+- **~8 sont des formulaires Cerfa nationaux** (attestations LVEREB-1085, géoportail, avis impôts) → standardisés par l'ASP, ne changent que si l'État réforme
+- **Seuls le BDC et le contrat de location** varient par marque/financier
+
+Donc même un changement de format BDC ne touche que ~15-20% des documents d'un dossier. Le reste continue de marcher normalement, et la précision globale du verdict ne s'effondre pas brutalement.
+
+### Conséquences
+- ➕ Aucun "single point of failure" — chaque niveau peut tomber sans cascade
+- ➕ Évolution gracieuse : le dégradement de qualité est visible (indice de confiance, taux d'accord) avant d'impacter les vendeurs
+- ➕ Mise à jour de prompts à chaud, sans redéploiement (Supabase = source de vérité technique)
+- ➕ Le comptable n'est jamais bypassé → crédibilité préservée
+- ➖ Charge comptable temporairement élevée en cas de drift (plus de dossiers à revoir manuellement)
+- ➖ Latence légèrement augmentée si le drift n'est pas détecté rapidement
+
+### À monitorer en Phase 6
+- Taux d'accord IA / comptable hebdomadaire par marque (cible >85% en stabilisation)
+- Indice de confiance moyen par marque (alerte si >10 points de chute en 7 jours)
+- Délai moyen entre "détection drift" et "prompt v2 actif"
+
+---
+
+## ADR-019 — Authentification du dashboard : Google OAuth + whitelist d'emails
+
+**Date** : 2026-05-13
+**Statut** : Acceptée
+
+### Contexte
+Le dashboard Streamlit (ADR-016) donne accès à des données ultra-sensibles (RFR, CNI, IBAN, etc.) et permet de modifier des dossiers Salesforce. Il faut une auth solide et fermée.
+
+### Décision
+
+**1. Streamlit utilise Google OAuth 2.0 (OpenID Connect)** via `st.login()` natif (Streamlit ≥1.42).
+
+**2. Whitelist d'emails préautorisés** dans variable d'env `DASHBOARD_ALLOWED_EMAILS` (CSV). Pas d'inscription, pas d'auto-provisioning. Tout email non-listé est rejeté avec un message clair.
+
+**3. L'API FastAPI reste protégée par `API_TOKEN`** (déjà en place). Le dashboard envoie ce token à chaque appel. L'API trace l'utilisateur via un header `X-User-Email: <email>` que Streamlit injecte depuis le token Google.
+
+### Emails initialement autorisés
+- `axelsaphir@hessautomobile.com` (comptable)
+- `tiffanydellmann@hessautomobile.com` (admin/dev)
+
+À ajouter dans `DASHBOARD_ALLOWED_EMAILS` au moment du déploiement Phase 5b.
+
+### Flux d'authentification
+
+```
+1. Axel ouvre https://dashboard.hess.../
+2. Streamlit : "Connectez-vous avec Google"
+3. Redirection Google OAuth → Axel s'authentifie sur son compte HESS
+4. Google renvoie un id_token à Streamlit avec email + nom
+5. Streamlit vérifie : email ∈ DASHBOARD_ALLOWED_EMAILS ?
+   - Non → écran "Accès refusé, contactez l'administrateur"
+   - Oui → session ouverte
+6. À chaque appel API :
+   Authorization: Bearer <API_TOKEN>
+   X-User-Email: axelsaphir@hessautomobile.com
+7. L'API trace l'email dans logs + table validations (audit)
+```
+
+### Pré-requis Google Cloud (Phase 5b)
+- Projet Google Cloud (réutiliser un existant HESS si possible)
+- Activer OAuth 2.0 Client ID (type Web application)
+- Configurer le redirect URI vers le domaine du dashboard
+- Récupérer `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` → `.env`
+
+### Conséquences
+- ➕ Sécurité forte : impossibilité de créer un compte, pas de mot de passe à voler
+- ➕ Cohérent avec l'IT HESS si Google Workspace est utilisé
+- ➕ Audit : email réel dans tous les logs et toutes les validations
+- ➕ Révocation simple : retirer l'email de la whitelist
+- ➖ Dépendance Google (mais HESS utilise déjà Gmail donc OK)
+- ➖ Phase 5b ne peut pas avancer tant que les credentials Google Cloud ne sont pas en place
+
+### Notes
+- L'API n'utilise pas elle-même Google OAuth — elle valide juste le token partagé `API_TOKEN`. L'authentification utilisateur est entièrement côté Streamlit.
+- Pour les appels n8n → API (workflow auto), n8n utilise le même `API_TOKEN` mais avec un header `X-User-Email: system@hessautomobile.com` pour distinguer les actions automatiques.
 
 ---
 

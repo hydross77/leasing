@@ -26,10 +26,25 @@ class Settings(BaseSettings):
     env: Literal["dev", "staging", "prod"] = "dev"
     log_level: str = "INFO"
 
-    # Mail override (PHASE DE TEST)
-    # Si défini, tous les mails (concession + interne) sont redirigés vers cette adresse.
-    # En prod : vide. En dev/test : tiffanydellmann@hessautomobile.com.
-    mail_recipient_override: str | None = None
+    # Mode mail global — TEST = tous les mails vers mail_recipient_override
+    #                   PROD = routage normal (vendeur + concession + comptable)
+    mail_mode: Literal["test", "prod"] = "test"
+
+    # Destinataire unique en mode TEST. Ignoré si mail_mode = "prod".
+    mail_recipient_override: str = "tiffanydellmann@hessautomobile.com"
+
+    # Adresse du comptable HESS (un seul destinataire interne, pas de CC additionnels)
+    # En mode test, ignoré : tous les mails partent vers mail_recipient_override
+    mail_comptable: str = "axelsaphir@hessautomobile.com"
+
+    # SMTP Gmail (compte copilote@hessautomobile.com) — utilisé en mode prod ET test
+    # En mode test, on envoie quand même via SMTP mais vers mail_recipient_override
+    smtp_host: str = "smtp.gmail.com"
+    smtp_port: int = 465
+    smtp_user: str = "copilote@hessautomobile.com"
+    smtp_password: str = ""
+    smtp_from: str = "copilote@hessautomobile.com"
+    smtp_from_name: str = "HESS Conformité Leasing"
 
     # Auth API (token partagé avec n8n)
     api_token: str = "changeme"

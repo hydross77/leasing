@@ -34,9 +34,10 @@ from simple_salesforce.exceptions import SalesforceError
 # Permet l'import de seed_concessions (même dossier scripts/)
 sys.path.insert(0, str(Path(__file__).parent))
 
-from app.config import get_settings  # noqa: E402
-from app.utils.logging import get_logger, setup_logging  # noqa: E402
-from seed_concessions import CONCESSION_MAPPING  # noqa: E402
+from seed_concessions import CONCESSION_MAPPING
+
+from app.config import get_settings
+from app.utils.logging import get_logger, setup_logging
 
 log = get_logger("phase1.extract")
 

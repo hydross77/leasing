@@ -20,8 +20,9 @@ ignore = [
 ]
 
 [lint.per-file-ignores]
-"tests/*" = ["N802", "N803"]  # noms test_xxx_YYY tolérés
-"scripts/*" = ["T201"]         # print autorisé dans les scripts
+"tests/*" = ["N802", "N803"]   # noms test_xxx_YYY tolérés
+"scripts/*" = ["T201"]          # print autorisé dans les scripts
+"app/api/routes/*" = ["B008"]   # Depends() en defaults = idiome FastAPI
 
 [lint.isort]
 known-first-party = ["app"]

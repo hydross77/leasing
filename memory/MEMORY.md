@@ -13,3 +13,8 @@
 - [Dashboard comptable Streamlit](project_dashboard_comptable.md) — validation systématique comptable avant tout mail vendeur, peu importe le verdict (ADR-013 rév + ADR-016)
 - [Concession "Siège" invalide](project_siege_invalide.md) — dossier rattaché au Siège HESS = invalide d'office, à exclure partout
 - [Refus d'office (bypass IA + comptable)](project_refus_office.md) — règles binaires (ex: Siège) → mail vendeur direct (ADR-017)
+- [Défense en profondeur changements de format](project_defense_profondeur.md) — 5 niveaux de filet face aux refontes BDC/contrat marques (ADR-018)
+- [Destinataires mails v2](project_destinataires_mails.md) — comptable = axelsaphir@ (UN SEUL). Ni Renzo, ni Aurélien, ni Alexandre.
+- [Champs SF existants suffisants](project_champs_sf.md) — Tech_Dossier_verifier__c (auto-décoché par SF) + Conformite_du_dossier__c (picklist 5 valeurs). Pas de nouveau champ à créer (ADR-015 à réviser).
+- [Preview PDF dans dashboard](project_dashboard_pdf_preview.md) — Axel doit pouvoir lire les PDFs directement dans le dashboard (API stream + Streamlit viewer, Phase 5b)
+- [Auth dashboard Google OAuth](project_auth_dashboard.md) — st.login() Google + whitelist d'emails, pas d'inscription (ADR-019)

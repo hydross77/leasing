@@ -16,7 +16,7 @@ from fastapi.responses import Response
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 
 from app import __version__
-from app.api.routes import health
+from app.api.routes import analyze, health
 from app.config import get_settings
 from app.utils.logging import get_logger, setup_logging
 
@@ -70,3 +70,4 @@ async def log_requests(request: Request, call_next):  # type: ignore[no-untyped-
 
 
 app.include_router(health.router)
+app.include_router(analyze.router)

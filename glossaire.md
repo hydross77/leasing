@@ -43,13 +43,35 @@ Objet custom Salesforce du groupe HESS qui représente un fichier attaché à un
 ### Opportunity (Salesforce)
 Entité Salesforce représentant une vente en cours. Champs clés pour nous :
 - `Id` : identifiant unique
-- `Name` : nom du dossier (ex: "OPP-2026-12345")
+- `Name` : nom du dossier (ex: "MICKAEL ROBERVAL - 30/07/2025")
+- `StageName` : **étape globale du dossier, pilotée par le COMPTABLE (Axel)** sur SF :
+  - `- Aucun -`, `1- Nouveau`, `2- Découverte des besoins`, `3- Offre en cours`
+  - `4- Gagné`, `4- Gagné / Facturé`, `4- Gagné / Livré`, `4- Gagné / Facturé / Livré`
+  - `5- Perdu` (dossier abandonné — distinct de "Client inéligible" ASP)
+  - **Notre système v2 ne touche JAMAIS à ce champ** — il est piloté manuellement par Axel.
+  - On le LIT pour filtrer le périmètre d'analyse (uniquement `4- Gagné` et variantes pré-livraison).
 - `Leasing_electrique__c` : booléen, true si c'est un dossier Leasing Social
-- `Tech_Dossier_verifier__c` : booléen, flag pour indiquer si on l'a déjà traité
-- `Conformite_du_dossier__c` : statut (ex: "Document absent ou à corriger", "Conforme")
-- `Concession_du_proprietaire__c` : nom de la concession (ex: "Fiat Belfort")
+- `Tech_Dossier_verifier__c` : booléen — **décoché AUTO par SF** quand le vendeur modifie un fichier sur l'opp. Signal "à (re-)traiter".
+- `Conformite_du_dossier__c` : **picklist conformité ASP** (distinct de StageName) — **partagé entre notre flux v2 et le comptable** (qui peut corriger manuellement) :
+  - `- Aucun -` (jamais analysé / à re-traiter)
+  - `Client inéligible` (refus d'office : Siège, ou client hors critères ASP)
+  - `Document absent ou à corriger` (anomalies, vendeur doit corriger)
+  - `Bon pour livraison` (validé conforme)
+  - `Dossier conforme après la livraison` (post-livraison, hors scope v2)
+  - **Notre système écrit dedans automatiquement** après validation comptable. Le comptable peut aussi l'override directement dans SF.
+- `Concession_du_proprietaire__c` : nom de la concession (ex: "Fiat Belfort", "Siège" exclu)
 - `Date_livraison_definitive__c` : date de livraison (à mettre à jour depuis BDC)
 - `Description` : champ texte libre
+- `Owner.Email` (User lié) : email vendeur, utilisé pour envoyer le mail vendeur
+
+⚠️ **Important — qui pilote quoi sur SF** :
+
+| Champ | Système v2 | Comptable (Axel) | Vendeur |
+|-------|------------|------------------|---------|
+| `StageName` | **LECTURE seule** | Pilote (manuel SF) | Aucun |
+| `Conformite_du_dossier__c` | **Écrit après validation comptable** | Peut override manuellement | Aucun |
+| `Tech_Dossier_verifier__c` | Repasse à TRUE après validation | Peut décocher pour forcer ré-analyse | Décoché AUTO par SF à chaque modif fichier |
+| `NEILON__File__c` | Lecture | Lecture | Upload / modif / suppression |
 
 ---
 
