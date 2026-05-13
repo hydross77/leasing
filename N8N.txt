@@ -1,0 +1,1229 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "resource": "search",
+        "query": "=SELECT Id, Name, CreatedDate, CreatedById, NEILON__Opportunity__c\nFROM NEILON__File__c\nWHERE NEILON__Opportunity__c = '{{ $json.data[1].Id }}'"
+      },
+      "type": "n8n-nodes-base.salesforce",
+      "typeVersion": 1,
+      "position": [
+        -2672,
+        368
+      ],
+      "id": "3a144447-94b3-4e33-893e-717dd76df185",
+      "name": "Perform a query",
+      "alwaysOutputData": true,
+      "credentials": {
+        "salesforceOAuth2Api": {
+          "id": "kng9V3hkoFHW2Dwh",
+          "name": "Salesforce account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "search",
+        "query": "=SELECT Id, Name, CreatedDate, CreatedById, NEILON__Opportunity__c, NEILON__File_Presigned_URL__c\nFROM NEILON__File__c\nWHERE NEILON__Opportunity__c = '{{ $json.NEILON__Opportunity__c }}'\nORDER BY CreatedDate DESC\n"
+      },
+      "type": "n8n-nodes-base.salesforce",
+      "typeVersion": 1,
+      "position": [
+        -2000,
+        80
+      ],
+      "id": "08277af1-5049-4283-bcbc-242979e60b33",
+      "name": "Perform a query1",
+      "alwaysOutputData": true,
+      "credentials": {
+        "salesforceOAuth2Api": {
+          "id": "kng9V3hkoFHW2Dwh",
+          "name": "Salesforce account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.NEILON__File_Presigned_URL__c }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1552,
+        80
+      ],
+      "id": "de5f7fa1-e32a-4a61-a8f1-eb7b204c50ec",
+      "name": "HTTP Request",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "resource": "document",
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.5-pro",
+          "mode": "list",
+          "cachedResultName": "models/gemini-2.5-pro"
+        },
+        "text": "Tu es un expert en analyse documentaire pour des dossiers de **Leasing Social**.  \nTu reçois un ou plusieurs documents (PDF ou images, parfois fusionnés).  \nTon objectif est d’identifier, extraire et structurer les informations importantes, sans évaluer la conformité réglementaire.\n\n---\n\n### Contraintes :\n- Réponds OBLIGATOIREMENT en **JSON unique et valide**.  \n- N’invente aucune donnée : si absente → `null`.  \n- Si plusieurs documents similaires sont présents → analyse-les séparément.  \n- Ne déduis jamais le format depuis le contenu ou le nom du fichier : utilise le format réel fourni par le pipeline en entrée.  \n- Aucun texte explicatif autour du JSON.  \n\n---\n\n### Structure de sortie (par document)\n{\n  \"nom_fichier_original\": \"nom_du_fichier.pdf\",\n  \"type_document\": \"...\",\n  \"format_document\": \"...\",\n  \"donnees_extraites\": {\n    \"nom\": \"...\",\n    \"adresse\": \"...\",\n    \"date_document\": \"...\",\n    \"signatures_presentes\": true/false,\n\n    \"zone_ecriture_client\": {\n      \"requise\": true/false,\n      \"elements_attendus\": [\"mention manuscrite\", \"date manuscrite\", \"montant en lettres\", \"\\\"lu et approuvé\\\"\", \"\\\"bon pour accord\\\"\", \"initiales\", \"Fait à / le\"],\n      \"elements_detectes\": [\"...\", \"...\"],\n      \"elements_manquants\": [\"...\", \"...\"],\n      \"extrait_manu\": \"texte manuscrit détecté ou null\"\n    },\n\n    \"premier_loyer_hors_option\": \"...\",\n    \"loyer_mensuel_hors_option\": \"...\",\n    \"prix_ht\": \"...\",\n    \"prix_ht_present\": true/false,\n    \"date_livraison\": \"...\",\n    \"adresse_client_bdc\": \"...\",\n    \"options_client\": [\"...\", \"...\"],\n\n    \"mention_leasing\": {\n      \"mention_presente\": true/false,\n      \"type_mention\": \"leasing social / leasing électrique / null\",\n      \"extrait_texte\": \"texte où la mention a été trouvée ou null\"\n    },\n\n    \"revenu_fiscal_reference\": \"...\",\n    \"nombre_parts\": \"...\",\n    \"revenu_par_part\": \"...\",\n\n    \"geoportail\": {\n      \"adresse_depart\": \"...\",\n      \"adresse_arrivee\": \"...\",\n      \"distance_km\": \"...\",\n      \"distance_detectee\": true/false,\n      \"mode_calcul\": \"Plus rapide / Plus court / null\"\n    },\n\n    \"piece_identite\": {\n      \"type\": \"CNI / passeport / titre de séjour\",\n      \"date_etablissement\": \"...\",\n      \"date_naissance\": \"...\",\n      \"date_expiration\": \"...\",\n      \"est_recto\": true/false,\n      \"est_verso\": true/false\n    },\n\n    \"permis_conduire\": {\n      \"version\": \"ancien_format_papier / nouveau_format_carte\",\n      \"date_etablissement\": \"...\",\n      \"date_expiration\": \"...\",\n      \"categories\": [\"...\", \"...\"]\n    },\n\n    \"attestation_gros_rouleur\": {\n      \"adresse_client\": \"...\",\n      \"adresse_employeur\": \"...\"\n    },\n\n    \"attestation_rattachement_fiscal\": {\n      \"nom_contribuable\": \"...\",\n      \"mention_rattachement\": true/false,\n      \"date_signature\": \"...\"\n    },\n\n    \"attestation_respect_engagements\": {\n      \"texte_integral\": \"...\",\n      \"date_signature\": \"...\"\n    },\n\n    \"justificatif_domicile\": {\n      \"type\": \"facture EDF / quittance / avis de taxe / autre\",\n      \"date_document\": \"...\",\n      \"adresse_detectee\": \"...\"\n    },\n\n    \"avis_imposition\": {\n      \"annee\": \"...\",\n      \"revenu_fiscal_reference\": \"...\",\n      \"nombre_parts\": \"...\",\n      \"revenu_par_part\": \"...\"\n    },\n\n    \"certificat_immatriculation\": {\n      \"numero_vin\": \"...\",\n      \"immatriculation\": \"...\",\n      \"nom_titulaire\": \"...\",\n      \"adresse_titulaire\": \"...\",\n      \"date_mise_en_circulation\": \"...\"\n    },\n\n    \"facture_achat\": {\n      \"numero_facture\": \"...\",\n      \"montant_total_ttc\": \"...\",\n      \"date_facture\": \"...\",\n      \"vendeur\": \"...\",\n      \"acheteur\": \"...\"\n    },\n\n    \"contrat_location\": {\n      \"numero_contrat\": \"...\",\n      \"date_signature\": \"...\",\n      \"montant_loyer\": \"...\",\n      \"duree_mois\": \"...\",\n      \"mentions_particulieres\": \"...\"\n    },\n\n    \"quittance_ou_plan_location\": {\n      \"type_piece\": \"quittance / facture 1er loyer / échéancier / plan de location / attestation\",\n      \"montant_premier_loyer\": \"...\",\n      \"date_document\": \"...\"\n    },\n\n    \"attestation_loyer_inf_200\": {\n      \"montant_loyer\": \"...\",\n      \"mention_aide_deduite\": true/false,\n      \"texte_integral\": \"...\"\n    },\n\n    \"photos_vehicule\": {\n      \"photo_vin_detectee\": true/false,\n      \"photo_arriere_detectee\": true/false\n    },\n\n    \"signatures_manquantes\": [\n      { \"page\": 2, \"section\": \"RÉCÉPISSÉ VALANT REÇU DE L’ACOMPTE\", \"type_absence\": \"signature\" },\n      { \"page\": 3, \"section\": \"DEMANDE DE LIVRAISON ANTICIPÉE\", \"type_absence\": \"paraphe\" }\n    ],\n\n    \"elements_non_remplis\": [\"...\", \"...\"]\n  }\n}\n\n---\n\n### Règles générales d’analyse\n\n#### Documents attendus (selon l’ASP 2025)\n1. **Justificatif d’identité**  \n2. **Justificatif de domicile**  \n3. **Avis d’imposition**  \n4. **Attestation sur l’honneur de rattachement fiscal**  \n5. **Attestation sur l’honneur de respect des engagements du bénéficiaire**  \n6. **Attestation sur l’honneur – situation “Gros rouleur”**  \n7. **Certificat d’immatriculation (carte grise)**  \n8. **Bon de commande (BDC)**  \n9. **Facture d’achat**  \n10. **Contrat de location**  \n11. **Pièce complémentaire au contrat** (quittance, échéancier, plan ou attestation)  \n12. **Attestation relative aux loyers inférieurs à 200 €**  \n13. **Photographie du véhicule (VIN)**  \n14. **Photographie de l’arrière du véhicule**  \n15. **Document Géoportail avec distance et mode de calcul**  \n\n---\n\n### Sortie finale\n{\n  \"documents\": [\n    { ... },\n    { ... }\n  ]\n}\n\n---\n\n### Rappels\n- Uniquement JSON, aucun texte autour.  \n- Champs manquants = `null`.  \n- Ne rien interpréter ni déduire.  \n- Pour les bons de commande, indiquer les pages et sections manquantes.  \n- Le champ `mode_calcul` du Géoportail doit toujours être rempli s’il est détecté (“Plus rapide” ou “Plus court”).\n",
+        "inputType": "binary",
+        "simplify": false,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1,
+      "position": [
+        -1328,
+        80
+      ],
+      "id": "0a754116-ec36-4f94-8033-661874f8bb70",
+      "name": "Analyze document",
+      "retryOnFail": false,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "jhBae09qxJQEYEMR",
+          "name": "Google Gemini(PaLM) Api account 2"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "resource": "opportunity",
+        "operation": "update",
+        "opportunityId": "={{ $json.data[1].Id }}",
+        "updateFields": {
+          "customFieldsUi": {
+            "customFieldsValues": [
+              {
+                "fieldId": "Tech_Dossier_verifier__c",
+                "value": "={{ true }}"
+              },
+              {
+                "fieldId": "=Conformite_du_dossier__c",
+                "value": "=Document absent ou à corriger"
+              }
+            ]
+          },
+          "description": "={{ $json.data[0].Description }}"
+        }
+      },
+      "type": "n8n-nodes-base.salesforce",
+      "typeVersion": 1,
+      "position": [
+        1616,
+        448
+      ],
+      "id": "a43a0eac-1444-48b9-a53a-d9f468eec86f",
+      "name": "Update an opportunity",
+      "credentials": {
+        "salesforceOAuth2Api": {
+          "id": "kng9V3hkoFHW2Dwh",
+          "name": "Salesforce account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Merge & impose le format depuis le binaire d'entrée\nconst allDocs = [];\n\nfunction tryParseJSON(text) {\n  let t = String(text || \"\").trim()\n    .replace(/^```json\\s*/i, \"\")\n    .replace(/```$/i, \"\")\n    .trim();\n  try { return JSON.parse(t); } catch {}\n  const m = t.match(/{[\\s\\S]*}/);\n  if (m) {\n    try { return JSON.parse(m[0]); } catch {}\n  }\n  return null;\n}\n\nfunction pushWithFormat(doc, detected) {\n  if (!doc || typeof doc !== \"object\") return;\n  if (!doc.type_document) doc.type_document = \"inconnu\";\n  doc.format_document = detected || doc.format_document || null;\n  if (!doc.donnees_extraites || typeof doc.donnees_extraites !== \"object\") {\n    doc.donnees_extraites = {};\n  }\n  allDocs.push(doc);\n}\n\nfor (const item of items) {\n  const mt =\n    item.binary?.data?.mimeType ||\n    item.json?.headers?.[\"content-type\"] ||\n    \"\";\n  const map = {\n    \"application/pdf\": \"pdf\",\n    \"image/jpeg\": \"jpg\",\n    \"image/jpg\": \"jpg\",\n    \"image/png\": \"png\",\n  };\n  const detected = map[mt.toLowerCase()] || \"pdf\";\n\n  const text =\n    item.json?.candidates?.[0]?.content?.parts?.[0]?.text ??\n    item.json?.content?.parts?.[0]?.text ??\n    item.json?.text ??\n    \"\";\n\n  let parsed = tryParseJSON(text);\n\n  if (!parsed) {\n    allDocs.push({\n      type_document: \"Parsing error\",\n      format_document: detected || null,\n      donnees_extraites: {},\n      _anomalies_tech: [\n        \"JSON parse error: unable to parse Analyze document output\",\n      ],\n      _raw_preview: String(text).slice(0, 500),\n    });\n    continue;\n  }\n\n  if (Array.isArray(parsed?.documents)) {\n    for (const d of parsed.documents) pushWithFormat(d, detected);\n  } else if (Array.isArray(parsed)) {\n    for (const d of parsed) pushWithFormat(d, detected);\n  } else if (parsed && typeof parsed === \"object\") {\n    if (parsed.type_document || parsed.donnees_extraites) {\n      pushWithFormat(parsed, detected);\n    } else {\n      pushWithFormat(\n        {\n          type_document: \"inconnu\",\n          donnees_extraites: parsed,\n        },\n        detected\n      );\n    }\n  } else {\n    allDocs.push({\n      type_document: \"Parsing error\",\n      format_document: detected || null,\n      donnees_extraites: {},\n      _anomalies_tech: [\"Unexpected parsed shape\"],\n    });\n  }\n}\n\n// Ajout de la date du jour au format JJ-MM-AAAA (local)\nconst now = new Date();\nconst dd = String(now.getDate()).padStart(2, \"0\");\nconst mm = String(now.getMonth() + 1).padStart(2, \"0\");\nconst yyyy = now.getFullYear();\nconst date_du_jour = `${dd}-${mm}-${yyyy}`;\n\nreturn [{ json: { documents: allDocs, date_du_jour } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1104,
+        80
+      ],
+      "id": "edbad154-42ac-438b-848a-d533eecfda5a",
+      "name": "Code",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "resource": "search",
+        "query": "=SELECT Id, Name, TECH_ConcessionName__c, TECH_OwnerName__c, LastModifiedDate, Concession_du_proprietaire__c\nFROM Opportunity\nWHERE Leasing_electrique__c = TRUE\nAND Tech_Dossier_verifier__c = FALSE\nLIMIT 20"
+      },
+      "type": "n8n-nodes-base.salesforce",
+      "typeVersion": 1,
+      "position": [
+        -4672,
+        448
+      ],
+      "id": "91dc314c-15b8-4c5c-8f99-52682dd77c98",
+      "name": "Information_opportunite",
+      "credentials": {
+        "salesforceOAuth2Api": {
+          "id": "kng9V3hkoFHW2Dwh",
+          "name": "Salesforce account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Lire la sortie ChatGPT\nlet content = $json?.choices?.[0]?.message?.content ?? \"\";\ncontent = content\n  .replace(/^[\\s`]*```(?:json)?/i, \"\")\n  .replace(/```[\\s`]*$/i, \"\")\n  .replace(/[\\u0000-\\u001F\\u2028\\u2029]+/g, \"\")\n  .trim();\n\nlet parsed;\ntry { parsed = JSON.parse(content); }\ncatch (e) { throw new Error(\"JSON invalide: \" + e.message + \"\\nContent: \" + content); }\n\nconst sujet = parsed.Sujet || \"Notification HESS Automobile\";\nconst corpsTxt = String(parsed.Corps || \"\");\n\n// Récup indice depuis \"Vérificateur conformité\"\nlet rawIndice =\n  $('Vérificateur conformité')?.first()?.json?.choices?.[0]?.message?.content?.verification_globale?.indice_confiance ?? \"\";\nrawIndice = String(rawIndice).trim();               // ex \"33%\" ou \"33\"\nconst indiceNum = (() => {\n  const m = rawIndice.match(/(\\d+(?:[.,]\\d+)?)/);\n  return m ? Math.max(0, Math.min(100, parseFloat(m[1].replace(\",\", \".\")))) : NaN;\n})();\nconst indiceText = isNaN(indiceNum) ? \"—\" : `${indiceNum}%`;\n\n// Segmentation depuis le texte source\nfunction extractSection(label){\n  const rx = new RegExp(label + \"\\\\s*:([\\\\s\\\\S]*?)(?:\\\\n\\\\n|$)\", \"i\");\n  const m = corpsTxt.match(rx);\n  return m ? m[1].trim() : \"\";\n}\nconst intro = corpsTxt.split(/\\n{2,}/)[0] || \"\";\nconst anomalies = extractSection(\"Anomalies détectées\");\nconst manquants = extractSection(\"Documents manquants\");\nconst conformes = extractSection(\"Documents conformes\");\n\nfunction bulletToLi(block){\n  return block\n    .split(/\\n+/)\n    .map(l => l.replace(/^\\s*[-•]\\s*/, \"\").trim())\n    .filter(Boolean)\n    .map(item => `<li style=\"margin:6px 0 0 0\">${item}</li>`)\n    .join(\"\");\n}\nfunction esc(str){ return String(str).replace(/&/g,\"&amp;\").replace(/</g,\"&lt;\").replace(/>/g,\"&gt;\"); }\n\n// Nom opportunité dynamique (fallback si pas de sujet explicite)\nconst displayName =\n  $item(0).$node[\"Code3\"]?.json?.Name ??\n  $('Code3').first().json.Name ??\n  \"Nom inconnu\";\n\n// Couleurs\nconst accent = \"#C9A978\";\nconst headerBlue = \"#2E3152\";\n\n// HTML\nconst Html = `<!doctype html>\n<html>\n<head>\n<meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>${esc(sujet)}</title>\n<style>\n@media (max-width:620px){\n  .container{width:100%!important}\n  .p24{padding:16px!important}\n  .col{display:block!important;width:100%!important}\n}\n</style>\n</head>\n<body style=\"margin:0;background:#F5F6F7;\">\n  <table role=\"presentation\" width=\"100%\" bgcolor=\"#F5F6F7\">\n    <tr><td align=\"center\" style=\"padding:28px 12px;\">\n      <table class=\"container\" role=\"presentation\" width=\"640\" style=\"width:640px;max-width:100%;border-radius:14px;overflow:hidden;background:#FFFFFF;\">\n        <tr><td style=\"height:6px;background:${accent};\"></td></tr>\n\n        <tr>\n          <td bgcolor=\"${headerBlue}\" class=\"p24\" style=\"padding:28px;color:#FFFFFF;font-family:Arial,Helvetica,sans-serif;\">\n            <table role=\"presentation\" width=\"100%\">\n              <tr>\n                <td style=\"font-size:22px;font-weight:700;\">HESS Automobile</td>\n                <td align=\"right\" style=\"font-size:12px;color:#D8E4EF;\">${new Date().toLocaleDateString(\"fr-FR\")}</td>\n              </tr>\n            </table>\n            <div style=\"font-size:18px;font-weight:700;margin-top:6px;\">${esc(sujet || (`Dossier non conforme – ${displayName}`))}</div>\n            <div style=\"margin-top:10px;\">\n              <span style=\"display:inline-block;border:1px solid #FFFFFF;color:${headerBlue};background:#FFFFFF;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:700;\">Conformité</span>\n            </div>\n          </td>\n        </tr>\n\n        <tr>\n          <td class=\"p24\" style=\"padding:24px;font-family:Arial,Helvetica,sans-serif;color:#111;font-size:14px;line-height:1.7;\">\n            ${esc(intro).replace(/\\n/g,\"<br>\")}\n          </td>\n        </tr>\n\n        <tr>\n          <td class=\"p24\" style=\"padding:0 24px 24px 24px;\">\n            <table role=\"presentation\" width=\"100%\">\n              <tr>\n                <td class=\"col\" valign=\"top\" style=\"width:40%;padding:0 8px;\">\n                  <table role=\"presentation\" width=\"100%\" style=\"background:${headerBlue};border-radius:12px;\">\n                    <tr><td style=\"padding:16px;font-family:Arial,Helvetica,sans-serif;color:#FFFFFF;\">\n                      <div style=\"font-size:12px;opacity:0.85;\">Indice de confiance</div>\n                      <div style=\"display:flex;align-items:center;gap:8px;margin:8px 0 10px 0;\">\n                        <div style=\"height:8px;background:#44496E;border-radius:999px;flex:1;overflow:hidden;\">\n                          <div style=\"height:8px;background:${accent};width:${isNaN(indiceNum)?33:indiceNum}%;\"></div>\n                        </div>\n                        <div style=\"font-size:14px;font-weight:700;color:${accent};white-space:nowrap;\">${indiceText}</div>\n                      </div>\n                      <div style=\"height:2px;background:${accent};width:28px;opacity:.9\"></div>\n                    </td></tr>\n                  </table>\n                </td>\n                <td class=\"col\" valign=\"top\" style=\"width:60%;padding:0 8px;\">\n                  <table role=\"presentation\" width=\"100%\" style=\"background:#F8F8F9;border:1px solid #ECEDEF;border-radius:12px;\">\n                    <tr><td style=\"padding:16px 16px 8px 16px;font-family:Arial,Helvetica,sans-serif;\">\n                      <div style=\"font-size:15px;font-weight:700;margin-bottom:6px;color:#111;\">Documents conformes</div>\n                      <ul style=\"padding-left:18px;margin:0;font-size:14px;line-height:1.6;color:#111;\">${bulletToLi(conformes)}</ul>\n                    </td></tr>\n                  </table>\n                </td>\n              </tr>\n            </table>\n          </td>\n        </tr>\n\n        <tr>\n          <td class=\"p24\" style=\"padding:0 24px 24px 24px;\">\n            <table role=\"presentation\" width=\"100%\">\n              <tr>\n                <td class=\"col\" valign=\"top\" style=\"width:50%;padding:0 8px;\">\n                  <table role=\"presentation\" width=\"100%\" style=\"background:#F8F8F9;border:1px solid #ECEDEF;border-radius:12px;\">\n                    <tr><td style=\"padding:16px 16px 8px 16px;font-family:Arial,Helvetica,sans-serif;\">\n                      <div style=\"font-size:15px;font-weight:700;margin-bottom:6px;color:#111;\">Anomalies détectées</div>\n                      <ul style=\"padding-left:18px;margin:0;font-size:14px;line-height:1.6;color:#111;\">${bulletToLi(anomalies)}</ul>\n                    </td></tr>\n                  </table>\n                </td>\n                <td class=\"col\" valign=\"top\" style=\"width:50%;padding:0 8px;\">\n                  <table role=\"presentation\" width=\"100%\" style=\"background:#FFFDF8;border:1px solid #F1E8D7;border-radius:12px;\">\n                    <tr><td style=\"padding:16px 16px 8px 16px;font-family:Arial,Helvetica,sans-serif;\">\n                      <div style=\"font-size:15px;font-weight:700;margin-bottom:6px;color:#111;\">Documents manquants</div>\n                      <ul style=\"padding-left:18px;margin:0;font-size:14px;line-height:1.6;color:#111;\">${bulletToLi(manquants)}</ul>\n                    </td></tr>\n                  </table>\n                </td>\n              </tr>\n            </table>\n          </td>\n        </tr>\n\n        <!-- AUCUN BOUTON DEMANDÉ -->\n\n        <tr>\n          <td style=\"padding:18px 24px 26px 24px;border-top:1px solid #ECEDEF;font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#6B7280;\">\n            Cordialement, l’équipe Conformité HESS Automobile<br>\n            <span style=\"color:#9AA1AA;\">Message automatique — ne pas répondre</span>\n          </td>\n        </tr>\n      </table>\n    </td></tr>\n  </table>\n</body>\n</html>`;\n\n// Texte brut\nconst Text = corpsTxt.replace(/<[^>]+>/g,\"\").trim();\n\n// Sortie\nreturn [{\n  json: {\n    Sujet: sujet,\n    Html: Html,\n    Text: Text,\n    Name:\n      ($item(0).$node[\"Code3\"]?.json?.Name ??\n       $('Code3').first().json.Name ??\n       \"\")\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -176,
+        80
+      ],
+      "id": "f3601315-15eb-4ab9-95b8-47b6b7c40bc9",
+      "name": "Code1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const seen = new Set();\nreturn items.filter(item => {\n  if (seen.has(item.json.Id)) return false;\n  seen.add(item.json.Id);\n  return true;\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1776,
+        80
+      ],
+      "id": "cec6fe20-fa1c-4b2a-8e9a-7da54051f144",
+      "name": "Code11",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ce517a90-ba0b-46ab-ad3f-beb91222916c",
+              "leftValue": "={{ $json.Sujet }}",
+              "rightValue": "Validation du dossier",
+              "operator": {
+                "type": "string",
+                "operation": "notContains"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        48,
+        80
+      ],
+      "id": "f67f1be9-2da2-4d4a-8ab7-0f20f20a109d",
+      "name": "Conforme ?"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4",
+          "mode": "list",
+          "cachedResultName": "GPT-4"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=Tu es un assistant qui génère des mails clairs, lisibles et professionnels pour un concessionnaire automobile.\n\nAnalyse les données JSON fournies et écris un email adapté au vendeur, au chef des ventes et à la secrétaire de la concession.\n\n⚙️ Règles :\n- Si `verification_globale.dossier_valide` est **true** :\n    - Sujet : \"Validation du dossier – {{ $item(0).$node[\"Code3\"].json[\"Name\"] }}\"\n    - Corps :\n        - Commencer par \"Bonjour,\"\n        - Confirmer que le dossier est conforme et validé.\n        - Indiquer qu’aucune anomalie n’a été relevée.\n        - Terminer avec \"Cordialement, L’équipe Conformité Hess Automobile.\"\n- Si `verification_globale.dossier_valide` est **false** :\n    - Sujet : \"Dossier non conforme – {{ $item(0).$node[\"Code3\"].json[\"Name\"] }}\"\n    - Corps :\n        - Commencer par \"Bonjour,\"\n        - Indiquer clairement que le dossier est non conforme.\n        - Séparer le contenu en sections distinctes avec titres :\n            \n            🔎 Anomalies détectées :  \n            - Lister chaque élément de `verification_globale.anomalies` sous forme de puces.  \n            \n            📑 Documents manquants :  \n            - Lister chaque élément de `verification_globale.documents_manquants` sous forme de puces.  \n            \n            📊 Indice de confiance :  \n            - Afficher la valeur de `verification_globale.indice_confiance` avec un pourcentage.  \n            \n            ✅ Documents conformes (si disponibles) :  \n            - Lister uniquement les éléments jugés conformes, mais **dans cette section finale**, pas mélangés avec les anomalies.  \n\n        - Terminer avec \"Cordialement, L’équipe Conformité Hess Automobile.\"\n\n📌 Format de sortie attendu (toujours en JSON, sans texte en dehors du JSON) :\n{\n  \"Sujet\": \"...\",\n  \"Corps\": \"...\"\n}\n- Le champ \"Corps\" doit contenir des **sauts de ligne réels** (`\\n\\n` entre paragraphes, `\\n- ` pour les listes).\n- Français correct, style professionnel, sans texte hors JSON.\n\n👉 Important :\n- Mail rédigé en français correct et professionnel.\n- Les sections doivent être clairement séparées par des sauts de ligne.\n- Utiliser des listes à puces pour améliorer la lisibilité.\n- Toujours inclure la signature : \"L’équipe Conformité Hess Automobile.\"\n\nVoici les données à analyser :\n{{ JSON.stringify($json.choices[0].message.content) }}\n"
+            }
+          ]
+        },
+        "simplify": false,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        -528,
+        80
+      ],
+      "id": "ee1b456b-6d1c-4f76-b884-f2d790938e48",
+      "name": "Génère mail",
+      "credentials": {
+        "openAiApi": {
+          "id": "gYzl89q59Yl1L8co",
+          "name": "Renzo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-5-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-5-MINI"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "={\n  \"role\": \"contrôleur_conformité_expert_leasing_social\",\n  \"objectif\": \"Analyser un dossier client de Leasing Social et vérifier sa conformité réglementaire complète à partir d’un tableau JSON de documents extraits et normalisés, sans inventer de données.\",\n  \"référence_temporelle\": {\n    \"date_du_jour\": \"{{ $json.date_du_jour }}\"\n  },\n  \"entrée\": {\n    \"documents\": \"{{ JSON.stringify($json.documents) }}\"\n  },\n  \"documents_attendus\": {\n    \"obligatoires\": [\n      \"Bon de commande\",\n      \"Contrat de location\",\n      \"Carte d’identité ou passeport ou titre de séjour\",\n      \"Permis de conduire\",\n      \"Justificatif de domicile (< 3 mois, pas de facture mobile)\",\n      \"Avis d’imposition complet\",\n      \"Attestation gros rouleur\",\n      \"Attestation relative au respect des montants des loyers (<200€) et mention de la déduction de l’aide\",\n      \"Fiche d’information restitution du véhicule\",\n      \"Copie de Géoportail (si applicable)\",\n      \"RIB\",\n      \"Photo du véhicule (numéro VIN visible)\",\n      \"Photo de l’arrière du véhicule (plaque visible et absence de pot d’échappement)\"\n    ],\n    \"facultatifs\": [\n      \"Attestation de rattachement au foyer fiscal\",\n      \"Attestation de respect des engagements du bénéficiaire\",\n      \"Facture d’achat\",\n      \"Échéancier, quittance ou plan de location (avec immatriculation)\",\n      \"Certificat d’immatriculation\",\n      \"Photographie du véhicule avec macaron « Avec l’État je roule plus vert »\"\n    ]\n  },\n  \"règles_vérification\": {\n    \"1_pièce_identité\": {\n      \"types_acceptés\": [\"CNI\", \"passeport\", \"titre de séjour\", \"pièce étrangère valide\", \"permis nouveau format\"],\n      \"validité\": \"à la date de livraison\",\n      \"signature\": true,\n      \"lisibilité\": true\n    },\n    \"2_permis_conduire\": {\n      \"formats\": [\"ancien\", \"nouveau\"],\n      \"expiration_nouveau_format\": \"doit être postérieure à la date de livraison\",\n      \"absence_expiration_ancien_format\": \"tolérée\"\n    },\n    \"3_bon_de_commande\": {\n      \"format\": \"PDF signé\",\n      \"champs_obligatoires\": [\n        \"prix_HT\",\n        \"prix_TTC\",\n        \"date_livraison\",\n        \"signature_client\",\n        \"mention_leasing_social_ou_électrique\"\n      ],\n      \"interdictions\": [\"Mention 'Bonus écologique' interdite\"],\n      \"frais_autorisés\": [\"mise à la route\", \"certificats\", \"frais d’envoi\", \"taxes\"],\n      \"aide_maximale\": \"≤27% du prix TTC (max 7000 €)\"\n    },\n    \"4_contrat_location\": {\n      \"conditions\": [\n        \"signé et daté\",\n        \"mentionne l’aide au leasing social\",\n        \"durée ≥ 3 ans\",\n        \"distance ≥ 12 000 km/an\",\n        \"loyer < 200 € hors options\"\n      ],\n      \"cohérence\": \"avec BDC, échéancier et attestation loyers\"\n    },\n    \"5_avis_imposition\": {\n      \"année\": \"année précédant le 1er versement du loyer\",\n      \"condition_revenus\": \"RFR/part ≤ 16300 €\",\n      \"lisible\": true\n    },\n    \"6_justificatif_domicile\": {\n      \"validité\": \"<= 3 mois à la date du 1er loyer\",\n      \"exclusion\": [\"factures de téléphone mobile\"],\n      \"lisible\": true\n    },\n    \"7_attestation_gros_rouleur\": {\n      \"obligatoire\": true,\n      \"signée_et_datée\": true,\n      \"cachet_entreprise\": true,\n      \"adresse_client_et_employeur\": true\n    },\n    \"8_copie_geoportail\": {\n      \"condition_utilité\": \"si distance domicile-travail < 15 km, document obligatoire\",\n      \"zones_surveillance\": {\n        \"15.01_à_18_km\": \"conforme avec alerte surveillance\",\n        \">100_km\": \"alerte distance excessive\"\n      },\n      \"règle_mode_calcul\": {\n        \"description\": \"Le mode de calcul du trajet doit être 'Plus court'. Si le mode 'Plus rapide' est détecté, la pièce est invalide.\",\n        \"valide_si\": \"mode_calcul == 'Plus court'\",\n        \"invalide_si\": \"mode_calcul == 'Plus rapide'\",\n        \"message_anomalie\": \"Le document Géoportail indique un trajet en mode 'Plus rapide' — non conforme. Seul le mode 'Plus court' est accepté.\"\n      }\n    },\n    \"9_photos_véhicule\": {\n      \"photo_VIN\": \"numéro VIN lisible\",\n      \"photo_arrière\": \"plaque visible + absence de pot d’échappement\",\n      \"photo_macaron\": \"recommandée\"\n    },\n    \"10_attestation_loyers\": {\n      \"signée_et_datée\": true,\n      \"loyer_max\": \"200 € hors options\",\n      \"mention_aide\": \"présente ('Aide au leasing social d’une voiture particulière électrique')\"\n    },\n    \"11_facture_achat\": {\n      \"doit_afficher\": \"coût d’acquisition\",\n      \"transmise_à\": \"MFS\"\n    },\n    \"12_règle_chronologie\": {\n      \"date_début_acceptée\": \"30/09/2025\",\n      \"documents_postérieurs_acceptés\": true\n    }\n  },\n    \"13_attestation_URSAFF\": {\n      \"Si travailleur indépendant détecté\": true,\n      \"Document obligatoire\"\n}\n  \"indice_conformité\": {\n    \"calcul\": {\n      \"formule\": \"documents_conformes / total_documents * 100\",\n      \"plafond_si_anomalie_critique\": 50,\n      \"format\": \"XX%\"\n    },\n    \"anomalies_critiques\": [\n      \"document manquant\",\n      \"absence de signature ou cachet requis\",\n      \"RFR/part > 16300\",\n      \"distance < 15 km sans justification\",\n      \"aide > 27% du prix TTC\",\n      \"frais non autorisés\",\n      \"mention 'Bonus écologique' sur BDC\",\n      \"photo VIN ou plaque absente\",\n      \"attestation loyers absente ou incohérente\",\n      \"Géoportail en mode 'Plus rapide'\"\n    ]\n  },\n  \"format_sortie\": {\n    \"type\": \"JSON\",\n    \"structure\": {\n      \"documents\": [],\n      \"verification_globale\": {\n        \"dossier_valide\": \"true/false\",\n        \"anomalies\": [],\n        \"documents_manquants\": [],\n        \"documents_valides\": [],\n        \"indice_confiance\": \"XX%\"\n      }\n    }\n  }\n}"
+            }
+          ]
+        },
+        "simplify": false,
+        "jsonOutput": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        -880,
+        80
+      ],
+      "id": "85f969d7-e593-48cb-abc8-845c7a6f1da2",
+      "name": "Vérificateur conformité",
+      "retryOnFail": true,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "openAiApi": {
+          "id": "gYzl89q59Yl1L8co",
+          "name": "Renzo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "renzodisantolo@hessautomobile.com",
+        "subject": "=A vérifier – {{ $('Code1').item.json.Sujet }}",
+        "message": "={{ $('Code1').item.json.Html }}",
+        "options": {
+          "appendAttribution": false,
+          "ccList": "aurelienpottier@hessautomobile.com, alexandreschott@hessautomobile.com"
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        496,
+        80
+      ],
+      "id": "ff033a11-a8db-4935-a473-6b1831ff8742",
+      "name": "Maill non conforme",
+      "webhookId": "dab58ebc-7a52-4a59-ac15-377cb6d10e2b",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "C6S78dzEeU61ka2M",
+          "name": "Copilote"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Mode: Run Once for Each Item\n\n// Dictionnaire Concession -> Email diffusion\nconst mapping = {\n  \"Fiat Belfort\": \"fiatbelfortconformite@hessautomobile.com\",\n  \"Fiat Besançon\": \"fiatbesanconconformite@hessautomobile.com\",\n  \"Fiat Bischheim\": \"fiatbischheimconformite@hessautomobile.com\",\n  \"Fiat Colmar\": \"fiatcolmarconformite@hessautomobile.com\",\n  \"Fiat Dijon\": \"fiatdijonconformite@hessautomobile.com\",\n  \"Jeep Dijon\": \"fiatdijonconformite@hessautomobile.com\",\n  \"Fiat Mulhouse\": \"fiatmulhouseconformite@hessautomobile.com\",\n  \"Hyundai Besançon\": \"hyundaibesanconconformite@hessautomobile.com\",\n  \"Hyundai Châlons\": \"hyundaichalonsconformite@hessautomobile.com\",\n  \"Hyundai Colmar\": \"hyundaicolmarconformite@hessautomobile.com\",\n  \"Hyundai Mulhouse\": \"hyundaimulhouseconformite@hessautomobile.com\",\n  \"Hyundai Reims\": \"hyundaireimsconformite@hessautomobile.com\",\n  \"Hyundai Strasbourg\": \"hyundaistrasbourgconformite@hessautomobile.com\",\n  \"Hyundai Epernay\": \"hyundaiepernayconformite@hessautomobile.com\",\n  \"Nissan Belfort\": \"nissanbelfortconformite@hessautomobile.com\",\n  \"Nissan Colmar\": \"nissancolmarconformite@hessautomobile.com\",\n  \"Nissan Dijon\": \"nissandijonconformite@hessautomobile.com\",\n  \"Nissan Haguenau\": \"nissanhaguenauconformite@hessautomobile.com\",\n  \"Nissan Metz\": \"nissanmetzconformite@hessautomobile.com\",\n  \"Nissan Montbéliard\": \"nissanmontbeliardconformite@hessautomobile.com\",\n  \"Nissan Mulhouse\": \"nissanmulhouseconformite@hessautomobile.com\",\n  \"Nissan Nancy\": \"nissannancyconformite@hessautomobile.com\",\n  \"Nissan Strasbourg\": \"nissanstrasbourgconformite@hessautomobile.com\",\n  \"Nissan Thionville\": \"nissanthionvilleconformite@hessautomobile.com\",\n  \"Opel Belfort\": \"opelbelfortconformite@hessautomobile.com\",\n  \"Opel Besançon\": \"opelbesanconconformite@hessautomobile.com\",\n  \"Opel Charleville\": \"opelcharlevilleconformite@hessautomobile.com\",\n  \"Opel Dijon\": \"opeldijonconformite@hessautomobile.com\",\n  \"Opel Metz\": \"opelmetzconformite@hessautomobile.com\",\n  \"Opel Nancy\": \"opelnancyconformite@hessautomobile.com\",\n  \"Opel Thionville\": \"opelthionvilleconformite@hessautomobile.com\",\n  \"Opel Bar-le-Duc\": \"opelbarleducconformite@hessautomobile.com\",\n  \"Opel Verdun\": \"opelverdunconformite@hessautomobile.com\",\n  \"Opel Saint-Dizier\": \"opelsaintdizierconformite@hessautomobile.com\",\n  \"Peugeot Charleville\": \"peugeotcharlevilleconformite@hessautomobile.com\",\n  \"Peugeot Hirson\": \"peugeothirsonconformite@hessautomobile.com\",\n  \"Peugeot Reims\": \"peugeotreimsconformite@hessautomobile.com\",\n  \"Peugeot Sedan\": \"peugeotsedanconformite@hessautomobile.com\",\n  \"Renault Belfort\": \"renaultbelfortconformite@hessautomobile.com\",\n  \"Renault Colmar\": \"renaultcolmarconformite@hessautomobile.com\",\n  \"Renault Haguenau\": \"renaulthaguenauconformite@hessautomobile.com\",\n  \"Renault Montbéliard\": \"renaultmontbeliardconformite@hessautomobile.com\",\n  \"Renault Mulhouse\": \"renaultmulhouseconformite@hessautomobile.com\",\n  \"Renault Saint-Louis\": \"renaultsaint-louisconformite@hessautomobile.com\",\n  \"Renault Saverne\": \"renaultsaverneconformite@hessautomobile.com\",\n  \"Renault Sélestat\": \"renaultselestatconformite@hessautomobile.com\",\n  \"Renault Strasbourg Hautepierre\": \"renaultstrasbourghautepierreconformite@hessautomobile.com\",\n  \"Renault Strasbourg Illkirch\": \"renaultstrasbourgillkirchconformite@hessautomobile.com\",\n  \"Renault Wissembourg\": \"renaultwissembourgconformite@hessautomobile.com\",\n  \"Toyota Belfort\": \"toyotabelfortconformite@hessautomobile.com\",\n  \"Toyota Besançon\": \"toyotabesanconconformite@hessautomobile.com\",\n  \"Toyota Forbach\": \"toyotaforbachconformite@hessautomobile.com\",\n  \"Toyota Longwy\": \"toyotalongwyconformite@hessautomobile.com\",\n  \"Toyota Metz\": \"toyotametzconformite@hessautomobile.com\",\n  \"Toyota Montbéliard\": \"toyotamontbeliardconformite@hessautomobile.com\",\n  \"Toyota Sarreguemines\": \"toyotasarregueminesconformite@hessautomobile.com\",\n  \"Toyota Thionville\": \"toyotathionvilleconformite@hessautomobile.com\",\n  \"Toyota Bar-le-Duc\": \"toyotabarleducconformite@hessautomobile.com\",\n  \"Toyota Verdun\": \"toyotaverdunconformite@hessautomobile.com\",\n  \"Toyota Saint-Dizier\": \"toyotasaintdizierconformite@hessautomobile.com\"\n};\n\n// Lit la concession depuis Code3, avec fallback\nconst concession =\n  $item(0).$node[\"Code3\"]?.json?.Concession_du_proprietaire__c\n  ?? $('Code3').first().json.Concession_du_proprietaire__c\n  ?? null;\n\nconst emailDiff = concession ? (mapping[concession] || null) : null;\n\nreturn {\n  json: {\n    Concession: concession,\n    Email_diffusion: emailDiff\n  }\n};\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        272,
+        -16
+      ],
+      "id": "809e4182-8f5d-4459-af6d-5ab49bb93b5b",
+      "name": "Mapping concession"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ----------------------\n// Format anomalies\n// ----------------------\nfunction formatAnomaly(a) {\n  if (typeof a === 'string') {\n    return `- ${a}`;\n  }\n\n  if (a && typeof a === 'object') {\n    const criticite = a.criticite ? `[${String(a.criticite).toUpperCase()}] ` : '';\n\n    // récupération du nom de l’anomalie sur tous les champs possibles\n    const libelle =\n      a.libelle\n      || a.champ\n      || a.nom\n      || a.message\n      || a.raison\n      || a.regle\n      || a.description\n      || a.type\n      || 'Anomalie non nommée';\n\n    // récupération des détails\n    const rawDetails = a['détails'] ?? a.details ?? a.detail ?? a.explication;\n    let detailsText = '';\n\n    if (Array.isArray(rawDetails)) {\n      detailsText = rawDetails.join(' ');\n    } else if (typeof rawDetails === 'string') {\n      detailsText = rawDetails;\n    }\n\n    const detailsPart = detailsText ? ` : ${detailsText}` : '';\n\n    return `- ${criticite}${libelle}${detailsPart}`;\n  }\n\nreturn [\n  {\n    json: { Description: description }\n  }\n];\n}\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        80
+      ],
+      "id": "8a10c99d-c6e3-439a-9014-82f9519e6606",
+      "name": "Code12"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Code node -> Run Once for All Items\n// Objectif: prendre l'opportunité la plus récente NON présente dans le sheet\n// + ajouter time (date+heure Europe/Paris)\n\nconst norm = s => String(s ?? \"\").trim().toLowerCase();\nconst nowParis = () =>\n  new Date().toLocaleString(\"fr-FR\", { timeZone: \"Europe/Paris\", hour12: false });\n\n// On récupère le premier item et son tableau \"data\"\nconst allItems = $input.all();\nconst data = (allItems[0] && allItems[0].json && allItems[0].json.data) || [];\n\n// Séparation:\n// - sheetItems = enregistrements \"sheet\" (sans attributes.type === \"Opportunity\")\n// - sfItems    = opportunités Salesforce\nconst sfItems = data.filter(r => r && r.attributes && r.attributes.type === \"Opportunity\");\nconst sheetItems = data.filter(r => !r || !r.attributes || r.attributes.type !== \"Opportunity\");\n\n// Ensemble des noms déjà présents dans le sheet\nconst sheetNames = new Set(sheetItems\n  .filter(i => i && i.Name)\n  .map(i => norm(i.Name))\n);\n\n// Filtre: garde seulement les opps absentes du sheet\nconst filtered = sfItems.filter(i => !sheetNames.has(norm(i.Name)));\n\n// Si rien à ajouter\nif (filtered.length === 0) {\n  return [];\n}\n\n// Si aucune info de date sur le premier (cas très dégradé)\nconst candidate = filtered[0];\n\n// Si aucune date exploitable sur l'ensemble, on garde l'ordre d'entrée\nif (!candidate.LastModifiedDate && !candidate.CreatedDate) {\n  return [{\n    json: {\n      ...candidate,\n      time: nowParis(),\n    },\n  }];\n}\n\n// Sinon on trie par date DESC (LastModifiedDate puis CreatedDate)\nfiltered.sort((a, b) => {\n  const da = new Date(a.LastModifiedDate || a.CreatedDate || 0);\n  const db = new Date(b.LastModifiedDate || b.CreatedDate || 0);\n  return db - da; // plus récent en premier\n});\n\n// On renvoie l'opp la plus récente non présente dans le sheet + time Paris\nconst top = filtered[0];\n\nreturn [{\n  json: {\n    ...top,\n    time: nowParis(),\n  },\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4000,
+        448
+      ],
+      "id": "c0186f6b-b95f-456d-8842-1fe5119e727e",
+      "name": "Code3"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -4448,
+        448
+      ],
+      "id": "7ff93952-1fcb-4cd6-8ad5-ae87e2f21a5b",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        -4224,
+        448
+      ],
+      "id": "4f388867-6c9c-4090-b05a-8cff016cfb9f",
+      "name": "Aggregate"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 */4 * * * *"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -4896,
+        448
+      ],
+      "id": "e0f4d5ca-4267-40f8-9bdf-1c3b4f6501d8",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Code node (JavaScript)\n\nconst items = $input.all();\n\nif (items.length === 1 && Object.keys(items[0].json).length === 0) {\n  return [\n    {\n      json: {\n        noncode: true\n      }\n    }\n  ];\n} else {\n  return items;\n}\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2448,
+        368
+      ],
+      "id": "1e7e8099-c0a4-4314-9d92-874400fe69d8",
+      "name": "Code4",
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "dataToSave": {
+          "values": [
+            {
+              "key": "nom",
+              "value": "={{ $('Code1').item.json.Sujet }}"
+            },
+            {
+              "key": "pass",
+              "value": "oui"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executionData",
+      "typeVersion": 1.1,
+      "position": [
+        496,
+        272
+      ],
+      "id": "30310834-3716-49d9-ae6e-8d5dc43f8d28",
+      "name": "Execution Data"
+    },
+    {
+      "parameters": {
+        "sendTo": "renzodisantolo@hessautomobile.com",
+        "subject": "=Dossier non conforme – Aucun document - {{ $item(0).$node[\"Code3\"].json[\"Name\"] }}",
+        "message": "=Aucune pièce justificative n'a été fournie pour le dossier de : {{ $item(0).$node[\"Code3\"].json[\"Name\"] }}",
+        "options": {
+          "appendAttribution": false,
+          "ccList": "aurelienpottier@hessautomobile.com, alexandreschott@hessautomobile.com"
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        -2000,
+        272
+      ],
+      "id": "43463027-a6c2-421a-a5df-4d96cd9a8c7e",
+      "name": "Maill non conforme1",
+      "webhookId": "dab58ebc-7a52-4a59-ac15-377cb6d10e2b",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "C6S78dzEeU61ka2M",
+          "name": "Copilote"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ce517a90-ba0b-46ab-ad3f-beb91222916c",
+              "leftValue": "={{ $json.noncode }}",
+              "rightValue": "Validation du dossier",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -2224,
+        368
+      ],
+      "id": "7c66dd53-ac80-41c5-8cfc-af2f6295fcbe",
+      "name": "Conforme ?1",
+      "alwaysOutputData": false,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "resource": "opportunity",
+        "operation": "update",
+        "opportunityId": "={{ $('Code3').item.json.Id }}",
+        "updateFields": {
+          "customFieldsUi": {
+            "customFieldsValues": [
+              {
+                "fieldId": "Tech_Dossier_verifier__c",
+                "value": "={{ true }}"
+              },
+              {
+                "fieldId": "=Conformite_du_dossier__c",
+                "value": "=Document absent ou à corriger"
+              }
+            ]
+          },
+          "description": "Aucun document reconnu"
+        }
+      },
+      "type": "n8n-nodes-base.salesforce",
+      "typeVersion": 1,
+      "position": [
+        -2000,
+        464
+      ],
+      "id": "a14d952a-5033-4f51-9d40-533d52281619",
+      "name": "Update an opportunity2",
+      "credentials": {
+        "salesforceOAuth2Api": {
+          "id": "kng9V3hkoFHW2Dwh",
+          "name": "Salesforce account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -3328,
+        368
+      ],
+      "id": "a229094f-771b-4c5e-b699-cf67d3415023",
+      "name": "Merge2"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -3552,
+        224
+      ],
+      "id": "e817de21-a6d8-4427-a16c-aef472bd70d4",
+      "name": "No Operation, do nothing1"
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        -3136,
+        368
+      ],
+      "id": "a60d1117-86e9-4006-b5eb-acbace9f23cd",
+      "name": "Aggregate2"
+    },
+    {
+      "parameters": {
+        "sendTo": "renzodisantolo@hessautomobile.com",
+        "subject": "=Dossier conforme – {{ $('Code1').item.json.Sujet }}",
+        "message": "={{ $('Code1').item.json.Corps }}",
+        "options": {
+          "appendAttribution": false,
+          "ccList": "aurelienpottier@hessautomobile.com, alexandreschott@hessautomobile.com"
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        272,
+        272
+      ],
+      "id": "028f7e0f-d364-4cfe-96b4-6766bf0cb723",
+      "name": "Maill non conforme2",
+      "webhookId": "a8af6963-83ec-416f-8cf1-d7088b8d56f6",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "C6S78dzEeU61ka2M",
+          "name": "Copilote"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.Email_diffusion }}",
+        "subject": "={{ $('Code1').item.json.Sujet }}",
+        "message": "={{ $('Code1').item.json.Html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        496,
+        -112
+      ],
+      "id": "77f32829-89ba-423c-9e19-b154781c7c9a",
+      "name": "Maill non conforme3",
+      "webhookId": "dab58ebc-7a52-4a59-ac15-377cb6d10e2b",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "C6S78dzEeU61ka2M",
+          "name": "Copilote"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "opportunity",
+        "operation": "update",
+        "opportunityId": "={{ $('Edit Fields').item.json.data[1].Id }}",
+        "updateFields": {
+          "customFieldsUi": {
+            "customFieldsValues": [
+              {
+                "fieldId": "Date_livraison_definitive__c",
+                "value": "={{ $('Code1').item.json.dateLivraison }}"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.salesforce",
+      "typeVersion": 1,
+      "position": [
+        2464,
+        560
+      ],
+      "id": "b5753f85-1e24-4d92-8cd7-c85aedaa8ef5",
+      "name": "Update an opportunity1",
+      "credentials": {
+        "salesforceOAuth2Api": {
+          "id": "kng9V3hkoFHW2Dwh",
+          "name": "Salesforce account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Node: \"Extraction date livraison\"\nconst dossier = $json.documents || [];\nconst opportunityId = $json.OpportunityId || $json.opportunityId; // récupère l'opportunity ID si déjà présent\n\n// Fonction pour formater la date (gère formats DD/MM/YYYY ou YYYY-MM-DD)\nfunction normalizeDate(dateStr) {\n  if (!dateStr) return null;\n\n  // Si déjà au format YYYY-MM-DD, on garde tel quel\n  if (/^\\d{4}-\\d{2}-\\d{2}$/.test(dateStr)) return dateStr;\n\n  // Si format DD/MM/YYYY → YYYY-MM-DD\n  if (/^\\d{2}\\/\\d{2}\\/\\d{4}$/.test(dateStr)) {\n    const [day, month, year] = dateStr.split('/');\n    return `${year}-${month}-${day}`;\n  }\n\n  // Si format YYYY/MM/DD → YYYY-MM-DD\n  if (/^\\d{4}\\/\\d{2}\\/\\d{2}$/.test(dateStr)) {\n    return dateStr.replace(/\\//g, '-');\n  }\n\n  return null; // Format inconnu\n}\n\n// Recherche du Bon de commande\nconst bdc = dossier.find(\n  (doc) =>\n    doc.type_document &&\n    doc.type_document.toLowerCase().includes(\"bon de commande\")\n);\n\nif (bdc && bdc.references && bdc.references.date_livraison) {\n  const rawDate = bdc.references.date_livraison;\n  const formattedDate = normalizeDate(rawDate);\n\n  if (formattedDate) {\n    return [\n      {\n        json: {\n          update: true,\n          opportunityId: opportunityId,\n          dateLivraison: formattedDate,\n          message: `Date de livraison détectée : ${formattedDate}`,\n        },\n      },\n    ];\n  } else {\n    return [\n      {\n        json: {\n          update: false,\n          message: `Format de date non reconnu (${rawDate})`,\n        },\n      },\n    ];\n  }\n} else {\n  return [\n    {\n      json: {\n        update: false,\n        message: \"Aucune date de livraison trouvée dans le Bon de commande.\",\n      },\n    },\n  ];\n}\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1840,
+        448
+      ],
+      "id": "0eeeae9c-1a92-495d-9e2e-37651405fa88",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cf1ac02f-331c-43f0-9847-189627c4d32a",
+              "leftValue": "={{$json[\"update\"]}}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2064,
+        448
+      ],
+      "id": "e1eb939a-d71b-4f14-b755-e00cb1adab7b",
+      "name": "If"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        944,
+        448
+      ],
+      "id": "a6730116-2161-48d9-bac0-bcf8a8254f01",
+      "name": "Merge3"
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        1168,
+        448
+      ],
+      "id": "9f7836f8-08ba-4e59-8c54-70bab19a7107",
+      "name": "Aggregate1"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "079e797a-9ff8-40da-bdc2-26b599a819c1",
+              "name": "data[0].Description",
+              "value": "={{ $json.data[0].Description }}",
+              "type": "string"
+            },
+            {
+              "id": "60f61094-7359-478a-becc-dcde15564f4e",
+              "name": "data[1].Id",
+              "value": "={{ $json.data[1].Id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1392,
+        448
+      ],
+      "id": "53c91ce7-5faa-498a-b492-3b6d24c1ae27",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "dataTableId": {
+          "__rl": true,
+          "value": "g7H30kkthLHjzbjy",
+          "mode": "list",
+          "cachedResultName": "Audit buffer",
+          "cachedResultUrl": "/projects/9iUXJK6tQf4zUcEa/datatables/g7H30kkthLHjzbjy"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Name": "={{ $json.Name }}"
+          },
+          "matchingColumns": [
+            "Name"
+          ],
+          "schema": [
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        -3776,
+        224
+      ],
+      "id": "db0efd21-1320-4aaa-8e7c-d641d5fc1a8f",
+      "name": "Insert row"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "g7H30kkthLHjzbjy",
+          "mode": "list",
+          "cachedResultName": "Audit buffer",
+          "cachedResultUrl": "/projects/9iUXJK6tQf4zUcEa/datatables/g7H30kkthLHjzbjy"
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        -4672,
+        256
+      ],
+      "id": "e02c4b71-464c-4dcc-b254-767e7bce5461",
+      "name": "Get row(s)"
+    }
+  ],
+  "connections": {
+    "Perform a query": {
+      "main": [
+        [
+          {
+            "node": "Code4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Perform a query1": {
+      "main": [
+        [
+          {
+            "node": "Code11",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Analyze document",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze document": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update an opportunity": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "Vérificateur conformité",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Information_opportunite": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Code1": {
+      "main": [
+        [
+          {
+            "node": "Conforme ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code11": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conforme ?": {
+      "main": [
+        [
+          {
+            "node": "Mapping concession",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Maill non conforme2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Génère mail": {
+      "main": [
+        [
+          {
+            "node": "Code1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Vérificateur conformité": {
+      "main": [
+        [
+          {
+            "node": "Génère mail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Maill non conforme": {
+      "main": [
+        [
+          {
+            "node": "Code12",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mapping concession": {
+      "main": [
+        [
+          {
+            "node": "Maill non conforme",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Execution Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Maill non conforme3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code12": {
+      "main": [
+        [
+          {
+            "node": "Merge3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code3": {
+      "main": [
+        [
+          {
+            "node": "Merge2",
+            "type": "main",
+            "index": 1
+          },
+          {
+            "node": "Merge3",
+            "type": "main",
+            "index": 1
+          },
+          {
+            "node": "Insert row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Aggregate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate": {
+      "main": [
+        [
+          {
+            "node": "Code3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Information_opportunite",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get row(s)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code4": {
+      "main": [
+        [
+          {
+            "node": "Conforme ?1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conforme ?1": {
+      "main": [
+        [
+          {
+            "node": "Maill non conforme1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Update an opportunity2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Perform a query1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge2": {
+      "main": [
+        [
+          {
+            "node": "Aggregate2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No Operation, do nothing1": {
+      "main": [
+        [
+          {
+            "node": "Merge2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate2": {
+      "main": [
+        [
+          {
+            "node": "Perform a query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge3": {
+      "main": [
+        [
+          {
+            "node": "Aggregate1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate1": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Update an opportunity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert row": {
+      "main": [
+        [
+          {
+            "node": "No Operation, do nothing1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s)": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {
+    "Schedule Trigger": [
+      {
+        "timestamp": "2025-12-11T09:28:00.003+01:00",
+        "Readable date": "December 11th 2025, 9:28:00 am",
+        "Readable time": "9:28:00 am",
+        "Day of week": "Thursday",
+        "Year": "2025",
+        "Month": "December",
+        "Day of month": "11",
+        "Hour": "09",
+        "Minute": "28",
+        "Second": "00",
+        "Timezone": "Europe/Paris (UTC+01:00)"
+      }
+    ]
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "6c1dc01c5ac8a7f35ed937c382e5e67c2c9071666c33e7166878fec212b6d12a"
+  }
+}

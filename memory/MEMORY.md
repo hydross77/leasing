@@ -1,0 +1,11 @@
+- [Profil utilisateur](user_role.md) — Tiffany Dellmann, copilote@hessautomobile.com, suit le projet Leasing Social HESS
+- [Préférences de collaboration](feedback_workflow.md) — avancer sans s'arrêter sur les questions de clarification, trancher et corriger ensuite
+- [Contexte projet HESS Leasing](project_leasing.md) — analyse automatique conformité ASP 2025, 1000 dossiers/jour cible, refonte n8n → API FastAPI
+- [Anomalies v1 à corriger en v2](project_anomalies_v1.md) — liste des faux positifs / négatifs identifiés en production du système actuel
+- [Axes d'amélioration produit v2](project_ameliorations_v2.md) — nouvelles features demandées (relances post-livraison, alerte 6 mois, contrôles loyer, renommage docs)
+- [Documents non requis (correction PDF)](project_docs_non_requis.md) — RIB et fiche de paie retirés de la liste obligatoire malgré le glossaire initial
+- [Référence N8N.txt v1](reference_n8n_v1.md) — workflow n8n actuel contenant SOQL, mapping 58 concessions, prompts Gemini/GPT à porter en v2
+- [Human-in-the-loop non_conformes](project_human_in_the_loop.md) — aucun mail concession sans validation humaine (ADR-013)
+- [Étude avant code des prompts](feedback_etude_avant_code.md) — Phase 1 obligatoire avant Phase 2, pas de prompt en aveugle
+- [Mail override en test](project_mail_override_test.md) — en dev/test, tous les mails partent vers tiffanydellmann@hessautomobile.com
+- [Typage pièces SF](project_typage_pieces_sf.md) — pas de champ dédié côté SF, renommage IA d'abord puis picklist post-MVP (ADR-014)

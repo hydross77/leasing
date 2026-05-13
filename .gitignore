@@ -1,0 +1,73 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtualenv
+.venv/
+venv/
+ENV/
+env/
+
+# Test / lint / type
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Secrets / config locale
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+
+# Données sensibles — JAMAIS commiter (RGPD)
+*.pdf
+*.png
+*.jpg
+*.jpeg
+dataset/
+downloads/
+fixtures/clients/
+
+# Exceptions : les PDFs de documentation projet
+!Amélioration*.pdf
+
+# Logs
+*.log
+logs/
+
+# OS
+Thumbs.db
+desktop.ini
